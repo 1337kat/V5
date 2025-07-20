@@ -1,0 +1,96 @@
+--// Jetpack Abuse with Visible Toggle //-- 
+
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+-- Constants
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- Jetpack Settings
+local JETPACK_KEY = Enum.KeyCode.I
+local UP_SPEED = 30
+local HORIZONTAL_SPEED = 19
+local jetpackEnabled = false
+
+-- Wait for character part
+local function waitForCharacterParts()
+	local root = Workspace:WaitForChild("Const", 10):WaitForChild("Ignore", 10):WaitForChild("LocalCharacter", 10)
+	local middle = root:WaitForChild("Middle", 10)
+	return middle
+end
+
+-- Jetpack Drawing Indicator
+local jetpackText = Drawing.new("Text")
+jetpackText.Color = Color3.fromRGB(0, 255, 255) -- Cyan
+jetpackText.Text = "Jetpack"
+jetpackText.Size = 25
+jetpackText.Outline = true
+jetpackText.Center = false
+jetpackText.Visible = false
+
+-- Maintain screen position under MiningDrill (which is at Y = 100)
+RunService.RenderStepped:Connect(function()
+	local viewportSize = Camera.ViewportSize
+	jetpackText.Position = Vector2.new(viewportSize.X - 100, 130) -- 30px below MiningDrill
+end)
+
+-- Toggle Input
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == JETPACK_KEY then
+		jetpackEnabled = not jetpackEnabled
+		jetpackText.Visible = jetpackEnabled
+		print("[🚀] Jetpack:", jetpackEnabled and "ENABLED" or "DISABLED")
+	end
+end)
+
+-- Jetpack Movement Logic
+local middle = waitForCharacterParts()
+
+RunService:BindToRenderStep("JetpackAbuse", Enum.RenderPriority.Character.Value + 2, function()
+	if not jetpackEnabled then return end
+	if not middle or not middle:IsDescendantOf(Workspace) then
+		middle = waitForCharacterParts()
+		return
+	end
+
+	local camDir = Camera.CFrame.LookVector
+	local moveDir = Vector3.zero
+	local flatDir = Vector3.new(camDir.X, 0, camDir.Z).Unit
+
+	if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+		moveDir += flatDir
+	end
+	if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+		moveDir -= flatDir
+	end
+	if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+		moveDir += Vector3.new(-flatDir.Z, 0, flatDir.X)
+	end
+	if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+		moveDir += Vector3.new(flatDir.Z, 0, -flatDir.X)
+	end
+
+	if moveDir.Magnitude > 0 then
+		moveDir = moveDir.Unit
+	end
+
+	local yVelocity = 0
+	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+		yVelocity = UP_SPEED
+	elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+		yVelocity = -UP_SPEED
+	end
+
+	pcall(function()
+		middle.AssemblyLinearVelocity = Vector3.new(
+			moveDir.X * HORIZONTAL_SPEED,
+			yVelocity,
+			moveDir.Z * HORIZONTAL_SPEED
+		)
+	end)
+end)
