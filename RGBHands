@@ -1,0 +1,23 @@
+local RunService = game:GetService("RunService")
+local FPSContainer = workspace:WaitForChild("Const"):WaitForChild("Ignore")
+local armParts = {}
+
+-- Get parts to persistently modify
+for _, name in ipairs({
+	"LeftUpperArm", "LeftLowerArm", "LeftHand",
+	"RightUpperArm", "RightLowerArm", "RightHand"
+}) do
+	local part = FPSContainer:WaitForChild("FPSArms"):FindFirstChild(name)
+	if part then
+		table.insert(armParts, part)
+	end
+end
+
+-- Maintain their properties every frame
+RunService.RenderStepped:Connect(function()
+	for _, part in ipairs(armParts) do
+		part.Color = Color3.fromRGB(255, 105, 180)
+		part.Material = Enum.Material.ForceField
+		pcall(function() part.TextureID = "rbxassetid://9305457875" end)
+	end
+end)
