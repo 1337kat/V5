@@ -1,0 +1,69 @@
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+-- Grab SwimHub-style parts
+local LocalCharacter = workspace:WaitForChild("Const"):WaitForChild("Ignore"):WaitForChild("LocalCharacter")
+local middle = LocalCharacter:WaitForChild("Middle")
+local bottom = LocalCharacter:WaitForChild("Bottom")
+local top = LocalCharacter:WaitForChild("Top")
+
+-- SpeedHack config
+local SPEED = 70 -- max speed
+local MIN_SPEED = 17
+local bhop_enabled = true
+local downcliff_mode = false
+
+-- Internal state
+local currentSpeed = SPEED
+local wtf = 0
+
+RunService.RenderStepped:Connect(function(delta)
+    local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+    local ckey = UserInputService:IsKeyDown(Enum.KeyCode.C)
+    if not (bhop_enabled and not downcliff_mode and shift and ckey) then
+        currentSpeed = SPEED
+        wtf = 0
+        return
+    end
+
+    -- Calculate direction from camera + WASD
+    local camLook = Camera.CFrame.LookVector
+    local move = Vector3.zero
+    local flat = Vector3.new(camLook.X, 0, camLook.Z).Unit
+
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += flat end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= flat end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+    if move.Magnitude == 0 then
+        currentSpeed = SPEED
+        wtf = 0
+        return
+    end
+
+    move = move.Unit
+    currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+    -- 🧠 FIXED: sync all 3 parts with stored CFrame
+    if wtf == 0 then
+        local topCF = top.CFrame
+        local midCF = middle.CFrame
+        local botCF = bottom.CFrame
+
+        middle.CFrame = midCF + Vector3.yAxis * 5
+        bottom.CFrame = botCF + Vector3.yAxis * 5
+        top.CFrame = topCF + Vector3.yAxis * 5
+    end
+
+    -- Y force after 0.85s
+    local yForce = wtf < 0.85 and 0 or -7
+    local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
+
+    middle.AssemblyLinearVelocity = velocity
+    bottom.AssemblyLinearVelocity = velocity
+    top.AssemblyLinearVelocity = velocity
+
+    wtf += delta
+end)
