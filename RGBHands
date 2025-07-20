@@ -1,23 +1,29 @@
-local RunService = game:GetService("RunService")
-local FPSContainer = workspace:WaitForChild("Const"):WaitForChild("Ignore")
-local armParts = {}
+-- ⏳ Wait for folders to exist
+local container = workspace:WaitForChild("Const"):WaitForChild("Ignore")
 
--- Get parts to persistently modify
-for _, name in ipairs({
-	"LeftUpperArm", "LeftLowerArm", "LeftHand",
-	"RightUpperArm", "RightLowerArm", "RightHand"
-}) do
-	local part = FPSContainer:WaitForChild("FPSArms"):FindFirstChild(name)
-	if part then
-		table.insert(armParts, part)
-	end
+local function setArmProperties(property, value)
+    local armParts = {"LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand"}
+    for _, partName in ipairs(armParts) do
+        container.FPSArms[partName][property] = value
+    end
 end
 
--- Maintain their properties every frame
-RunService.RenderStepped:Connect(function()
-	for _, part in ipairs(armParts) do
-		part.Color = Color3.fromRGB(255, 105, 180)
-		part.Material = Enum.Material.ForceField
-		pcall(function() part.TextureID = "rbxassetid://9305457875" end)
-	end
-end)
+setArmProperties("Color", Color3.fromRGB(255, 105, 180))
+setArmProperties("Material", Enum.Material.ForceField)
+setArmProperties("TextureID", "rbxassetid://9305457875")
+
+local function changeArmsToForceField(player)
+    local fakeArms = container:FindFirstChild("FPSArms"):FindFirstChild("Fake")
+    if not fakeArms then return end
+
+    for _, partName in ipairs({"c_LeftLowerArm", "c_RightLowerArm"}) do
+        local armPart = fakeArms:FindFirstChild(partName)
+        if armPart and armPart:IsA("BasePart") then
+            armPart.Material = Enum.Material.ForceField
+            armPart.Color = Color3.fromRGB(255, 105, 180)
+        end
+    end
+end
+
+local player = game.Players.LocalPlayer
+changeArmsToForceField(player)
