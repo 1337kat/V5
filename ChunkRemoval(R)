@@ -1,0 +1,51 @@
+local Plr = game:GetService("Players").LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local Mouse = Plr:GetMouse()
+local storedRegions = {}
+
+-- function to delete terrain and store data
+local function deleteTerrain()
+    -- define the size of the terrain chunk to be cleared
+    local regionSize = Vector3.new(26, 18, 18) -- adjust this as needed
+
+    -- calculate the region to clear based on mouse hit position
+    if not Mouse.Target then return end
+
+    local region = Region3.new(
+        Mouse.Hit.Position - regionSize / 2,
+        Mouse.Hit.Position + regionSize / 2
+    )
+
+    -- store the region data
+    local material, occupancy = workspace.Terrain:ReadVoxels(region, 4)
+    table.insert(storedRegions, {region = region, material = material, occupancy = occupancy})
+
+    -- clear the region
+    workspace.Terrain:FillRegion(region, 4, Enum.Material.Air)
+end
+
+-- function to restore terrain
+local function restoreTerrain()
+    -- restore all the stored regions
+    for _, data in pairs(storedRegions) do
+        workspace.Terrain:WriteVoxels(data.region, 4, data.material, data.occupancy)
+    end
+
+    -- clear the stored regions after restoration
+    storedRegions = {}
+end
+
+-- listen for mouse button press
+Mouse.Button1Down:connect(function()
+    -- check if "R" is held down
+    if UserInputService:IsKeyDown(Enum.KeyCode.R) then
+        deleteTerrain()
+    end
+end)
+
+-- listen for the "P" key press
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.P then
+        restoreTerrain()
+    end
+end)
