@@ -1,0 +1,54 @@
+local userInputService = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
+local camera = workspace.CurrentCamera
+
+local toggleKey = Enum.KeyCode.K
+
+local movementSpeed = 0.9
+
+local cameraCFrame = camera.CFrame
+local isCustomCameraMode = false
+local pitchYaw = Vector2.new(0, 0)
+
+local function toggleCustomCameraMode()
+    isCustomCameraMode = not isCustomCameraMode
+    if isCustomCameraMode then
+
+        cameraCFrame = camera.CFrame
+        local lookVector = -cameraCFrame.LookVector 
+        pitchYaw = Vector2.new(math.asin(-lookVector.Y), math.atan2(lookVector.X, lookVector.Z))
+    end
+end
+
+local function updateCamera(deltaTime)
+    if isCustomCameraMode then
+
+        local mouseDelta = userInputService:GetMouseDelta()
+
+        pitchYaw = pitchYaw + Vector2.new(-mouseDelta.Y * 0.002, -mouseDelta.X * 0.002)
+
+        pitchYaw = Vector2.new(math.clamp(pitchYaw.X, -math.rad(90), math.rad(90)), pitchYaw.Y)
+
+        local newOrientation = CFrame.fromOrientation(pitchYaw.X, pitchYaw.Y, 0)
+        cameraCFrame = CFrame.new(cameraCFrame.Position) * newOrientation
+
+        local movementVector = Vector3.new()
+        if userInputService:IsKeyDown(Enum.KeyCode.F) then
+            movementVector = movementVector + cameraCFrame.LookVector * movementSpeed
+        end
+        if userInputService:IsKeyDown(Enum.KeyCode.V) then
+            movementVector = movementVector - cameraCFrame.LookVector * movementSpeed
+        end
+
+        cameraCFrame = cameraCFrame + movementVector * deltaTime * 64
+        camera.CFrame = cameraCFrame
+    end
+end
+
+userInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if not gameProcessedEvent and input.KeyCode == toggleKey then
+        toggleCustomCameraMode()
+    end
+end)
+
+runService.RenderStepped:Connect(updateCamera)
