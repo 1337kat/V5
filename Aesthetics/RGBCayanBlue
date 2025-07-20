@@ -1,0 +1,36 @@
+-- ⏳ Wait for folders to exist
+local container = workspace:WaitForChild("Const"):WaitForChild("Ignore")
+local RunService = game:GetService("RunService")
+local player = game.Players.LocalPlayer
+
+-- Target arm parts
+local realArmParts = {"LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand"}
+local fakeArmParts = {"c_LeftLowerArm", "c_RightLowerArm"}
+
+-- 🔷 Darker cyan-blue color
+local energyColor = Color3.fromRGB(0, 175, 220)
+
+-- 🔁 Apply every frame
+RunService.RenderStepped:Connect(function()
+	-- Apply to real arms
+	for _, partName in ipairs(realArmParts) do
+		local part = container:FindFirstChild("FPSArms") and container.FPSArms:FindFirstChild(partName)
+		if part then
+			part.Color = energyColor
+			part.Material = Enum.Material.ForceField
+			pcall(function() part.TextureID = "rbxassetid://9305457875" end)
+		end
+	end
+
+	-- Apply to fake arms
+	local fakeArms = container:FindFirstChild("FPSArms") and container.FPSArms:FindFirstChild("Fake")
+	if fakeArms then
+		for _, partName in ipairs(fakeArmParts) do
+			local part = fakeArms:FindFirstChild(partName)
+			if part and part:IsA("BasePart") then
+				part.Color = energyColor
+				part.Material = Enum.Material.ForceField
+			end
+		end
+	end
+end)
