@@ -1,0 +1,67 @@
+-- Required services and objects
+local workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+
+local LocalPlayer = Players.LocalPlayer
+local middle = workspace:WaitForChild("Const"):WaitForChild("Ignore"):WaitForChild("LocalCharacter"):WaitForChild("Middle")
+
+-- ForceSprint variables
+local forcesprint = false
+local speed = 20
+
+-- ForceSprint on-screen indicator
+local sprintText = Drawing.new("Text")
+sprintText.Color = Color3.new(0, 1, 0)
+sprintText.Text = "ForceSprint"
+sprintText.Size = 25
+sprintText.Outline = true
+sprintText.Center = false
+sprintText.Visible = false
+
+-- Update position (slightly below SafeRide position)
+RunService.RenderStepped:Connect(function()
+	local viewportSize = Camera.ViewportSize
+	sprintText.Position = Vector2.new(viewportSize.X - 100, 70)
+end)
+
+-- Toggle ForceSprint with key N
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not gameProcessed and input.KeyCode == Enum.KeyCode.N then
+		forcesprint = not forcesprint
+		sprintText.Visible = forcesprint
+	end
+end)
+
+-- ForceSprint movement logic
+RunService.RenderStepped:Connect(function()
+	if forcesprint and middle then
+		local cameralook = Camera.CFrame.LookVector
+		local neutralized_look = Vector3.new(cameralook.X, 0, cameralook.Z).Unit
+		local direction = Vector3.zero
+
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			direction += neutralized_look
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+			direction -= neutralized_look
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+			direction += Vector3.new(-neutralized_look.Z, 0, neutralized_look.X)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+			direction += Vector3.new(neutralized_look.Z, 0, -neutralized_look.X)
+		end
+
+		if direction.Magnitude > 0 then
+			direction = direction.Unit
+			middle.AssemblyLinearVelocity = Vector3.new(
+				direction.X * speed,
+				middle.AssemblyLinearVelocity.Y,
+				direction.Z * speed
+			)
+		end
+	end
+end)
