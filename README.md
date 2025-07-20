@@ -48,8 +48,8 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/UnlockCameraRotation',
 	'https://raw.githubusercontent.com/1337kat/V5/main/UnloadWeapons(H)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/SwimhubSprint',
-	'https://raw.githubusercontent.com/1337kat/V5/main/StealLoot(V)'
-	'https://raw.githubusercontent.com/1337kat/V5/main/SafeRide(N)'
+	'https://raw.githubusercontent.com/1337kat/V5/main/StealLoot(V)',
+	'https://raw.githubusercontent.com/1337kat/V5/main/SafeRide(N)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/MiningDrill(J)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/Longneck(L)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/JetpackMod(i)',
