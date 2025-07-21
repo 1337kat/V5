@@ -27,8 +27,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if mode == 0 then
         top.Prism1.CFrame = originalCFrame
     elseif mode == 1 then
-        top.Prism1.CFrame = originalCFrame - Vector3.yAxis * 6
+        top.Prism1.CFrame = originalCFrame - Vector3.yAxis * 5
     elseif mode == 2 then
-        top.Prism1.CFrame = originalCFrame - Vector3.yAxis * 3.4
+        top.Prism1.CFrame = originalCFrame - Vector3.yAxis * 6
     end
 end)
