@@ -1,14 +1,12 @@
--- Ultimate Physics-Nuke Hover: Boat is 100% still when idle, no matter water or force!
+-- Ultimate Boat Stillness for Roblox Water (CFrame Lock, Zero Tilt)
+-- Toggle with H
+
 local Players = game:GetService("Players")
 local UserInputService = cloneref(game:GetService("UserInputService"))
 local Workspace = cloneref(game:GetService("Workspace"))
 local RunService = cloneref(game:GetService("RunService"))
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-
-if not LPH_JIT_MAX then
-    LPH_JIT_MAX = function(...) return ... end
-end
 
 local cheat = {
     connections = { renderstepped = {} },
@@ -36,8 +34,7 @@ do
     local flyConn = nil
     local speed = 347
     local boat, middle, lastdir = nil, nil, Vector3.new(1, 0, 0)
-    local desiredPosition, desiredOrientation = nil, nil
-    local bodyPosition, alignOrientation = nil, nil
+    local desiredPosition, desiredYaw = nil, nil
 
     local BoatIdentifiers = {
         {"Hull", "Metal"},
@@ -58,9 +55,7 @@ do
         middle = nil
         lastdir = Vector3.new(1, 0, 0)
         desiredPosition = nil
-        desiredOrientation = nil
-        if bodyPosition then bodyPosition:Destroy(); bodyPosition = nil end
-        if alignOrientation then alignOrientation:Destroy(); alignOrientation = nil end
+        desiredYaw = nil
     end
 
     LocalPlayer.CharacterAdded:Connect(function()
@@ -101,36 +96,14 @@ do
     end
 
     local function lockBoat(hull)
-        -- Lock Position
-        if not bodyPosition then
-            bodyPosition = Instance.new("BodyPosition")
-            bodyPosition.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-            bodyPosition.D = 1000
-            bodyPosition.P = 1e5
-            bodyPosition.Parent = hull
-        end
-        bodyPosition.Position = desiredPosition
-
-        -- Lock Orientation
-        if not alignOrientation then
-            alignOrientation = Instance.new("AlignOrientation")
-            alignOrientation.MaxTorque = 1e9
-            alignOrientation.Responsiveness = 200
-            alignOrientation.Parent = hull
-        end
-        alignOrientation.CFrame = desiredOrientation
-
-        -- Zero all velocities and override any physics instantly
+        -- Strongest possible lock: forcibly set CFrame, zero all velocities
+        hull.Anchored = false
         hull.AssemblyLinearVelocity = Vector3.zero
         hull.AssemblyAngularVelocity = Vector3.zero
         hull.Velocity = Vector3.zero
         hull.RotVelocity = Vector3.zero
-        hull.Anchored = false -- Just in case
-    end
-
-    local function unlockBoat()
-        if bodyPosition then bodyPosition:Destroy(); bodyPosition = nil end
-        if alignOrientation then alignOrientation:Destroy(); alignOrientation = nil end
+        -- Set perfectly flat orientation
+        hull.CFrame = CFrame.new(desiredPosition) * CFrame.Angles(0, desiredYaw, 0)
     end
 
     local function flyStep()
@@ -148,14 +121,14 @@ do
         if not hull or not hull:IsA("BasePart") then return end
 
         local look = Camera.CFrame.LookVector
-        look = Vector3.new(look.X, 0, look.Z).Unit
+        look = Vector3.new(look.X, 0, look.Z)
+        if look.Magnitude > 0 then look = look.Unit else look = Vector3.new(1, 0, 0) end
         local dir = Vector3.zero
 
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Vector3.new(-look.Z, 0, look.X) end
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir += Vector3.new(look.Z, 0, -look.X) end
-        -- No vertical, only horizontal
 
         local atRest = dir == Vector3.zero
         if not atRest then
@@ -165,19 +138,27 @@ do
         hull.Anchored = false
 
         if atRest then
-            -- Save current position and orientation
+            -- Lock position and orientation (perfectly flat, no tilt)
             if not desiredPosition then desiredPosition = hull.Position end
-            if not desiredOrientation then desiredOrientation = hull.CFrame end
+            if not desiredYaw then
+                local _, y, _ = hull.CFrame:ToOrientation()
+                desiredYaw = y
+            end
             lockBoat(hull)
         else
-            -- Release lock and apply movement
             desiredPosition = nil
-            desiredOrientation = nil
-            unlockBoat()
+            desiredYaw = nil
+            -- Manual movement (horizontal only)
             local move = lastdir
             local velocity = Vector3.new(move.X * speed, 0, move.Z * speed)
             hull.AssemblyLinearVelocity = velocity
-            hull.AssemblyAngularVelocity = Vector3.zero -- no spinning while moving either
+            hull.AssemblyAngularVelocity = Vector3.zero
+            hull.Velocity = velocity
+            hull.RotVelocity = Vector3.zero
+            -- Force upright while moving (optional, disables rolling while in motion)
+            local pos = hull.Position
+            local _, y, _ = hull.CFrame:ToOrientation()
+            hull.CFrame = CFrame.new(pos) * CFrame.Angles(0, y, 0)
         end
     end
 
@@ -190,7 +171,7 @@ do
             middle = getMiddle()
             findNearestBoat()
             if not flyConn then
-                flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+                flyConn = cheat.utility.new_renderstepped(flyStep)
             end
         else
             if flyConn then
