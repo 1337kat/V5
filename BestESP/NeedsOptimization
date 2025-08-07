@@ -1,0 +1,175 @@
+-- Needs FPS Optimization (BEST ESP)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local UserInputService = game:GetService("UserInputService")
+local drawings = {}
+local drawingsEnabled = true
+
+local labelSize = 25
+local distanceSize = 19
+local distanceYOffset = 2
+local DISTANCE_HEADSTART = 5
+
+local espParts = {
+  {partName = "Body", partSize = Vector3.new(2.5, 6.25, 2.5), espLabel = "TC", espColor = Color3.new(0, 1, 0)},
+  {partName="Hitbox", partSize=Vector3.new(4.5,6.75,2.25), espLabel="l", espColor=Color3.new(1,0,0)}
+}
+
+local function isCloseSize(a, b, eps)
+    eps = eps or 0.01
+    return math.abs(a.X - b.X) <= eps and math.abs(a.Y - b.Y) <= eps and math.abs(a.Z - b.Z) <= eps
+end
+
+local function getEspData(part)
+    for _, data in ipairs(espParts) do
+        if part:IsA("BasePart") and part.Name == data.partName and isCloseSize(part.Size, data.partSize) then
+            return data
+        end
+    end
+    return nil
+end
+
+local function removeDrawing(part)
+    if drawings[part] then
+        if drawings[part].label then drawings[part].label:Remove() end
+        if drawings[part].dist then drawings[part].dist:Remove() end
+        drawings[part] = nil
+    end
+end
+
+local function updateDrawing(part, color, showDistance)
+    if not drawings[part] then
+        drawings[part] = {}
+    end
+    -- Main label
+    if not drawings[part].label then
+        local drawLabel = Drawing.new("Text")
+        drawLabel.Size = labelSize
+        drawLabel.Center = true
+        drawLabel.Outline = true
+        drawLabel.OutlineColor = Color3.new(0,0,0)
+        drawLabel.Color = color
+        drawLabel.Visible = true
+        drawings[part].label = drawLabel
+    end
+    drawings[part].label.Color = color
+
+    -- Distance (optional, below label)
+    if showDistance then
+        if not drawings[part].dist then
+            local drawDist = Drawing.new("Text")
+            drawDist.Size = distanceSize
+            drawDist.Center = true
+            drawDist.Outline = true
+            drawDist.OutlineColor = Color3.new(0,0,0)
+            drawDist.Color = color
+            drawDist.Visible = true
+            drawings[part].dist = drawDist
+        end
+        drawings[part].dist.Color = color
+    elseif drawings[part].dist then
+        drawings[part].dist:Remove()
+        drawings[part].dist = nil
+    end
+end
+
+local function tryAddESP(part)
+    local data = getEspData(part)
+    if data then
+        updateDrawing(part, data.espColor, data.showDistance)
+    end
+end
+
+workspace.DescendantRemoving:Connect(removeDrawing)
+workspace.DescendantAdded:Connect(tryAddESP)
+for _, part in ipairs(workspace:GetDescendants()) do
+    tryAddESP(part)
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.O then
+        drawingsEnabled = not drawingsEnabled
+        for _, objs in pairs(drawings) do
+            if objs.label then objs.label.Visible = drawingsEnabled end
+            if objs.dist then objs.dist.Visible = drawingsEnabled end
+        end
+    end
+end)
+
+-- Z-ORDER DEPTH FIX: REMOVE/RECREATE DRAWINGS FROM FARTHEST TO CLOSEST EACH FRAME
+RunService.RenderStepped:Connect(function()
+    if not drawingsEnabled then
+        for _, objs in pairs(drawings) do
+            if objs.label then objs.label.Visible = false end
+            if objs.dist then objs.dist.Visible = false end
+        end
+        return
+    end
+
+    -- Build list of ESP parts that are onscreen, with distance
+    local displayList = {}
+    for part, objs in pairs(drawings) do
+        if part and part:IsDescendantOf(workspace) then
+            local data = getEspData(part)
+            if data and objs.label then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local dist = (Camera.CFrame.Position - part.Position).Magnitude
+                    table.insert(displayList, {part = part, objs = objs, data = data, dist = dist, screenPos = screenPos})
+                else
+                    if objs.label then objs.label.Visible = false end
+                    if objs.dist then objs.dist.Visible = false end
+                end
+            else
+                removeDrawing(part)
+            end
+        else
+            removeDrawing(part)
+        end
+    end
+
+    -- Sort by distance (farthest first, closest last)
+    table.sort(displayList, function(a, b) return a.dist > b.dist end)
+
+    -- For each, REMOVE and recreate Drawing objects in sorted order
+    for _, v in ipairs(displayList) do
+        local part, objs, data, dist, screenPos = v.part, v.objs, v.data, v.dist, v.screenPos
+
+        -- Remove and recreate to bump closest to top
+        if objs.label then objs.label:Remove() end
+        if objs.dist then objs.dist:Remove() end
+
+        -- Label
+        local drawLabel = Drawing.new("Text")
+        drawLabel.Size = labelSize
+        drawLabel.Center = true
+        drawLabel.Outline = true
+        drawLabel.OutlineColor = Color3.new(0,0,0)
+        drawLabel.Color = data.espColor
+        drawLabel.Visible = true
+        drawLabel.Text = data.espLabel or ""
+        drawLabel.Position = Vector2.new(screenPos.X, screenPos.Y)
+        objs.label = drawLabel
+
+        -- Distance (below label, if needed)
+        if data.showDistance then
+            local drawDist = Drawing.new("Text")
+            drawDist.Size = distanceSize
+            drawDist.Center = true
+            drawDist.Outline = true
+            drawDist.OutlineColor = Color3.new(0,0,0)
+            drawDist.Color = data.espColor
+            drawDist.Visible = true
+            local distValue = math.floor(dist + 0.5) - DISTANCE_HEADSTART
+            drawDist.Text = ("[%d]"):format(distValue)
+            local yOffset = (drawLabel.TextBounds.Y / 2) + (drawDist.TextBounds.Y / 2) + distanceYOffset
+            drawDist.Position = Vector2.new(screenPos.X, screenPos.Y + yOffset)
+            objs.dist = drawDist
+        else
+            objs.dist = nil
+        end
+
+        drawings[part] = objs
+    end
+end)
