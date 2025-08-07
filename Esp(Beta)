@@ -5,8 +5,8 @@ local UserInputService = game:GetService("UserInputService")
 local drawings = {}
 local drawingsEnabled = true
 
-local labelSize = 25
-local distanceSize = 17 -- slightly smaller for perf
+local labelSize = 26
+local distanceSize = 19 -- slightly smaller for perf
 local distanceYOffset = 2
 local DISTANCE_HEADSTART = 5
 
