@@ -1,0 +1,185 @@
+-- Ultimate WASD Toggle Flight (No Auto-Move)
+local Players = game:GetService("Players")
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local RunService = cloneref(game:GetService("RunService"))
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local cheat = {
+    connections = { renderstepped = {} },
+    flyModule = {}
+}
+
+RunService.RenderStepped:Connect(function(dt)
+    for _, func in pairs(cheat.connections.renderstepped) do
+        func(dt)
+    end
+end)
+
+cheat.utility = {}
+cheat.utility.new_renderstepped = function(func)
+    cheat.connections.renderstepped[func] = func
+    return {
+        Disconnect = function()
+            cheat.connections.renderstepped[func] = nil
+        end
+    }
+end
+
+do
+    local isFlying = false
+    local flyConn = nil
+    local inputStates = {}
+
+    local forwardSpeed = 320         -- W/S speed
+    local sideSpeed = 320            -- A/D speed
+
+    local boat, middle = nil, nil
+
+    local BoatIdentifiers = {
+        {"Hull", "Metal"},
+    }
+
+    local function getMiddle()
+        local ok, result = pcall(function()
+            return Workspace:WaitForChild("Const", 2)
+                :WaitForChild("Ignore", 2)
+                :WaitForChild("LocalCharacter", 2)
+                :WaitForChild("Middle", 2)
+        end)
+        return ok and result or nil
+    end
+
+    local function resetState()
+        boat = nil
+        middle = nil
+    end
+
+    LocalPlayer.CharacterAdded:Connect(function()
+        isFlying = false
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        resetState()
+    end)
+
+    local function findNearestBoat()
+        boat = nil
+        local closest = math.huge
+        local origin = middle and middle.Position or Camera.CFrame.Position
+
+        for _, model in pairs(Workspace:GetChildren()) do
+            if model:IsA("Model") then
+                for _, group in ipairs(BoatIdentifiers) do
+                    local allFound = true
+                    for _, name in ipairs(group) do
+                        if not model:FindFirstChild(name) then
+                            allFound = false
+                            break
+                        end
+                    end
+                    if allFound then
+                        local refPart = model:FindFirstChild(group[1])
+                        if refPart and refPart:IsA("BasePart") then
+                            local dist = (refPart.Position - origin).Magnitude
+                            if dist < closest then
+                                closest = dist
+                                boat = model
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    local function flyStep(dt)
+        if not isFlying then return end
+
+        middle = middle or getMiddle()
+        if not middle then return end
+
+        if not boat or (boat:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 50 then
+            findNearestBoat()
+            return
+        end
+
+        local hull = boat:FindFirstChild("Hull")
+        if not hull or not hull:IsA("BasePart") then return end
+
+        -- Build movement vector from WASD
+        local move = Vector3.zero
+        local look = Camera.CFrame.LookVector
+        local right = Camera.CFrame.RightVector
+
+        look = Vector3.new(look.X, 0, look.Z)
+        right = Vector3.new(right.X, 0, right.Z)
+
+        if look.Magnitude > 0 then look = look.Unit else look = Vector3.new(1,0,0) end
+        if right.Magnitude > 0 then right = right.Unit else right = Vector3.new(0,0,1) end
+
+        if inputStates[Enum.KeyCode.W] then move = move + look * forwardSpeed end
+        if inputStates[Enum.KeyCode.S] then move = move - look * forwardSpeed end
+        if inputStates[Enum.KeyCode.A] then move = move - right * sideSpeed end
+        if inputStates[Enum.KeyCode.D] then move = move + right * sideSpeed end
+
+        if move.Magnitude < 1 then
+            -- No keys held: stay perfectly still, no velocity
+            hull.AssemblyLinearVelocity = Vector3.zero
+            hull.Velocity = Vector3.zero
+        else
+            hull.AssemblyLinearVelocity = move
+            hull.Velocity = move
+        end
+
+        hull.Anchored = false
+        hull.AssemblyAngularVelocity = Vector3.zero
+        hull.RotVelocity = Vector3.zero
+
+        -- Stay upright
+        local pos = hull.Position
+        local _, y, _ = hull.CFrame:ToOrientation()
+        hull.CFrame = CFrame.new(pos) * CFrame.Angles(0, y, 0)
+    end
+
+    -- Track keys
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and input.KeyCode then
+            inputStates[input.KeyCode] = true
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input, gpe)
+        if not gpe and input.KeyCode then
+            inputStates[input.KeyCode] = false
+        end
+    end)
+
+    local function toggleFly()
+        isFlying = not isFlying
+        warn("Boat Fly " .. (isFlying and "enabled" or "disabled"))
+        if isFlying then
+            resetState()
+            middle = getMiddle()
+            findNearestBoat()
+            if not flyConn then
+                flyConn = cheat.utility.new_renderstepped(flyStep)
+            end
+        else
+            if flyConn then
+                flyConn:Disconnect()
+                flyConn = nil
+            end
+            resetState()
+        end
+    end
+
+    -- V to toggle
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and input.KeyCode == Enum.KeyCode.B then
+            toggleFly()
+        end
+    end)
+
+    cheat.flyModule.Toggle = toggleFly
+    cheat.flyModule.IsFlying = function() return isFlying end
+end
