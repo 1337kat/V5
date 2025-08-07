@@ -1,0 +1,173 @@
+-- Ultra-light ESP (your style, fixed + distance option + no ghosting)
+local a = game:GetService("Players")
+local b = game:GetService("RunService")
+local c = workspace.CurrentCamera
+local d = a.LocalPlayer
+local e = game:GetService("UserInputService")
+
+local g = {}                    -- [part] = {label=Text, dist=Text?, data=table}
+local drawingsEnabled = true
+local h = true                  -- (kept from your code, acts like master enable if you want)
+
+-- Config
+local DIST_HEADSTART = 5
+local LABEL_SIZE = 26
+local DIST_SIZE = 18
+local MAX_DISTANCE = 3000       -- set 0 to disable cull
+
+-- Your ESP table
+local n = {
+    {partName = "Body", partSize = Vector3.new(2.5, 6.25, 2.5), espLabel = "TC", espColor = Color3.new(0, 1, 0)},
+    {partName = "Hitbox", partSize = Vector3.new(4.5, 6.75, 2.25), espLabel = "l", espColor = Color3.new(1, 0, 0)},
+    {partName = "lights3", partSize = Vector3.new(0.42277026176452637, 0.6625227928161621, 0.07328414916992188), espLabel = "CAR", espColor = Color3.new(1.000000, 0.000000, 0.000000)},
+    {partName = "Crates", partSize = Vector3.new(5.803810119628906, 2.7799904346466064, 5.775084972381592), espLabel = "Airdrop", espColor = Color3.new(1.000000, 0.098039, 0.000000)},
+    {partName = "Prim", partSize = Vector3.new(3, 0.25, 3), espLabel = "x", espColor = Color3.new(0.000000, 0.478431, 0.866667)},
+    {partName = "Bottom", partSize = Vector3.new(2.9763996601104736, 2.150311231613159, 6.314671516418457), espLabel = "MilitaryCrate", espColor = Color3.new(0.043137, 0.611765, 0.090196)},
+    {partName="Plastics2", partSize=Vector3.new(5.546261787414551, 1.9555978775024414, 3.854473352432251), espLabel="ATV", espColor=Color3.new(1.000000, 0.000000, 0.000000)},
+    {partName = "Prim", partSize = Vector3.new(1.8424512147903442, 3.0965967178344727, 0.9474747776985168), espLabel = "Gas", espColor = Color3.new(1.000000, 0.098039, 0.000000)},
+    {partName="Frame", partSize=Vector3.new(6.3781023025512695, 10.241004943847656, 34.129459381103516), espLabel="Chopper", espColor=Color3.new(1,0,0)},
+    {partName="Metal", partSize=Vector3.new(2.730620861053467, 7.635319232940674, 2.730620861053467), espLabel="Z", espColor=Color3.new(1, 1, 0), showDistance = true},
+    {partName="Hull", partSize=Vector3.new(12.083436965942383, 6.691596984863281, 28.874725341796875), espLabel="Boat", espColor=Color3.new(1, 0.2, 0.6)}
+}
+
+-- === helpers ===
+local function o(p, q, r) -- close size
+    r = r or 0.01
+    return math.abs(p.X - q.X) <= r and math.abs(p.Y - q.Y) <= r and math.abs(p.Z - q.Z) <= r
+end
+
+local function _newText(sz, col)
+    local t = Drawing.new("Text")
+    t.Size = sz
+    t.Center = true
+    t.Outline = true
+    t.OutlineColor = Color3.new(0,0,0)
+    t.Color = col
+    t.Visible = false
+    return t
+end
+
+local function _hide(o)
+    if not o then return end
+    if o.label then
+        o.label.Visible = false
+        o.label.Position = Vector2.new(-9999, -9999) -- anti-ghost
+    end
+    if o.dist then
+        o.dist.Visible = false
+        o.dist.Position = Vector2.new(-9999, -9999)
+    end
+end
+
+local function x(t) -- remove drawing(s)
+    local o = g[t]
+    if not o then return end
+    if o.label then o.label:Remove() end
+    if o.dist  then o.dist:Remove()  end
+    g[t] = nil
+end
+
+-- build quick lookup to avoid scanning n every frame
+local lk = {} -- [name][sizeKey] = data
+local function _k(v) return string.format("%.3f,%.3f,%.3f", v.X, v.Y, v.Z) end
+for _, D in ipairs(n) do
+    lk[D.partName] = lk[D.partName] or {}
+    lk[D.partName][_k(D.partSize)] = D
+end
+
+local function _matchData(C)
+    local t1 = lk[C.Name]; if not t1 then return nil end
+    return t1[_k(C.Size)]
+end
+
+local function s(t, data) -- ensure pooled drawings exist & set static props
+    local o = g[t]
+    if not o then
+        o = {}
+        o.data = data
+        o.label = _newText(LABEL_SIZE, data.espColor)
+        if data.showDistance then
+            o.dist = _newText(DIST_SIZE, data.espColor)
+        end
+        g[t] = o
+    end
+    -- static text can be set once
+    if o.label.Text ~= (data.espLabel or "") then
+        o.label.Text = data.espLabel or ""
+    end
+    -- ensure colors (in case you change them in table later)
+    o.label.Color = data.espColor
+    if o.dist then o.dist.Color = data.espColor end
+    return o
+end
+
+-- === event wiring ===
+workspace.DescendantAdded:Connect(function(C)
+    if C:IsA("BasePart") then
+        local D = _matchData(C)
+        if D then s(C, D) end
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(C)
+    x(C)
+end)
+
+for _, C in ipairs(workspace:GetDescendants()) do
+    if C:IsA("BasePart") then
+        local D = _matchData(C)
+        if D then s(C, D) end
+    end
+end
+
+e.InputBegan:Connect(function(T, U)
+    if U then return end
+    if T.KeyCode == Enum.KeyCode.O then
+        drawingsEnabled = not drawingsEnabled
+        if not drawingsEnabled then
+            for _, o in pairs(g) do _hide(o) end
+        end
+    end
+end)
+
+-- === main loop ===
+b.RenderStepped:Connect(function()
+    if not h or not drawingsEnabled then
+        for _, o in pairs(g) do _hide(o) end
+        return
+    end
+
+    for part, o in pairs(g) do
+        if not part or not part.Parent then
+            x(part)
+        else
+            local sp, onScreen = c:WorldToViewportPoint(part.Position)
+            if not onScreen then
+                _hide(o)
+            else
+                local dist = (c.CFrame.Position - part.Position).Magnitude
+                if MAX_DISTANCE > 0 and dist > MAX_DISTANCE then
+                    _hide(o)
+                else
+                    -- label
+                    o.label.Position = Vector2.new(sp.X, sp.Y)
+                    o.label.Visible  = true
+
+                    -- distance (only if table says so)
+                    if o.dist then
+                        local dshow = math.max(0, math.floor(dist + 0.5) - DIST_HEADSTART)
+                        local txt = "[" .. dshow .. "]"
+                        if o.dist.Text ~= txt then o.dist.Text = txt end
+
+                        -- stack under label (cheap bounds)
+                        local lb = o.label.TextBounds
+                        local db = o.dist.TextBounds
+                        local yOff = (lb.Y * 0.5) + (db.Y * 0.5) + 2
+                        o.dist.Position = Vector2.new(sp.X, sp.Y + yOff)
+                        o.dist.Visible  = true
+                    end
+                end
+            end
+        end
+    end
+end)
