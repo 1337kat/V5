@@ -1,0 +1,187 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local UserInputService = game:GetService("UserInputService")
+local drawings = {}
+local drawingsEnabled = true
+
+local labelSize = 25
+local distanceSize = 17 -- slightly smaller for perf
+local distanceYOffset = 2
+local DISTANCE_HEADSTART = 5
+
+local espParts = {
+    {partName = "Body", partSize = Vector3.new(2.5, 6.25, 2.5), espLabel = "TC", espColor = Color3.new(0, 1, 0), showDistance = true},
+    {partName = "Hitbox", partSize = Vector3.new(4.5, 6.75, 2.25), espLabel = "l", espColor = Color3.new(1, 0, 0)},
+    {partName = "lights3", partSize = Vector3.new(0.42277026176452637, 0.6625227928161621, 0.07328414916992188), espLabel = "CAR", espColor = Color3.new(1.000000, 0.000000, 0.000000)},
+    {partName = "Crates", partSize = Vector3.new(5.803810119628906, 2.7799904346466064, 5.775084972381592), espLabel = "Airdrop", espColor = Color3.new(1.000000, 0.098039, 0.000000)},
+    {partName = "Prim", partSize = Vector3.new(3, 0.25, 3), espLabel = "x", espColor = Color3.new(0.000000, 0.478431, 0.866667), showDistance = true},
+    {partName = "Bottom", partSize = Vector3.new(2.9763996601104736, 2.150311231613159, 6.314671516418457), espLabel = "MilitaryCrate", espColor = Color3.new(0.043137, 0.611765, 0.090196)},
+    {partName="Plastics2", partSize=Vector3.new(5.546261787414551, 1.9555978775024414, 3.854473352432251), espLabel="ATV", espColor=Color3.new(1.000000, 0.000000, 0.000000)},
+    {partName = "Prim", partSize = Vector3.new(1.8424512147903442, 3.0965967178344727, 0.9474747776985168), espLabel = "Gas", espColor = Color3.new(1.000000, 0.098039, 0.000000)},
+    {partName="Frame", partSize=Vector3.new(6.3781023025512695, 10.241004943847656, 34.129459381103516), espLabel="Chopper", espColor=Color3.new(1,0,0)},
+    {partName="Metal", partSize=Vector3.new(2.730620861053467, 7.635319232940674, 2.730620861053467), espLabel="Z", espColor=Color3.new(1, 1, 0), showDistance = true},
+    {partName="Hull", partSize=Vector3.new(12.083436965942383, 6.691596984863281, 28.874725341796875), espLabel="Boat", espColor=Color3.new(1, 0.2, 0.6)}
+}
+
+local function isCloseSize(a, b, eps)
+    eps = eps or 0.01
+    return math.abs(a.X - b.X) <= eps and math.abs(a.Y - b.Y) <= eps and math.abs(a.Z - b.Z) <= eps
+end
+
+local function getEspData(part)
+    for _, data in ipairs(espParts) do
+        if part:IsA("BasePart") and part.Name == data.partName and isCloseSize(part.Size, data.partSize) then
+            return data
+        end
+    end
+    return nil
+end
+
+local function removeDrawing(part)
+    if drawings[part] then
+        if drawings[part].label then drawings[part].label:Remove() end
+        if drawings[part].dist then drawings[part].dist:Remove() end
+        drawings[part] = nil
+    end
+end
+
+local function createDrawing(part, data)
+    if not drawings[part] then drawings[part] = {} end
+    local objs = drawings[part]
+
+    -- Main label
+    if not objs.label then
+        local label = Drawing.new("Text")
+        label.Size = labelSize
+        label.Center = true
+        label.Outline = true
+        label.OutlineColor = Color3.new(0,0,0)
+        label.Color = data.espColor
+        label.Visible = true
+        objs.label = label
+    end
+
+    -- Distance (optional)
+    if data.showDistance and not objs.dist then
+        local dist = Drawing.new("Text")
+        dist.Size = distanceSize
+        dist.Center = true
+        dist.Outline = true
+        dist.OutlineColor = Color3.new(0,0,0)
+        dist.Color = data.espColor
+        dist.Visible = true
+        objs.dist = dist
+    elseif not data.showDistance and objs.dist then
+        objs.dist:Remove()
+        objs.dist = nil
+    end
+end
+
+local function tryAddESP(part)
+    local data = getEspData(part)
+    if data then
+        createDrawing(part, data)
+    end
+end
+
+workspace.DescendantRemoving:Connect(removeDrawing)
+workspace.DescendantAdded:Connect(tryAddESP)
+for _, part in ipairs(workspace:GetDescendants()) do
+    tryAddESP(part)
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.O then
+        drawingsEnabled = not drawingsEnabled
+        for _, objs in pairs(drawings) do
+            if objs.label then objs.label.Visible = drawingsEnabled end
+            if objs.dist then objs.dist.Visible = drawingsEnabled end
+        end
+    end
+end)
+
+-- Cache last sorted order
+local lastOrder = {}
+
+RunService.RenderStepped:Connect(function()
+    if not drawingsEnabled then
+        for _, objs in pairs(drawings) do
+            if objs.label then objs.label.Visible = false end
+            if objs.dist then objs.dist.Visible = false end
+        end
+        return
+    end
+
+    -- Gather all active, onscreen, valid ESPs
+    local toDisplay = {}
+    for part, objs in pairs(drawings) do
+        if part and part:IsDescendantOf(workspace) then
+            local data = getEspData(part)
+            if data and objs.label then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local dist = (Camera.CFrame.Position - part.Position).Magnitude
+                    table.insert(toDisplay, {
+                        part = part, objs = objs, data = data, dist = dist, screenPos = screenPos
+                    })
+                else
+                    if objs.label then objs.label.Visible = false end
+                    if objs.dist then objs.dist.Visible = false end
+                end
+            else
+                removeDrawing(part)
+            end
+        else
+            removeDrawing(part)
+        end
+    end
+
+    -- Sort only if order changed
+    table.sort(toDisplay, function(a, b) return a.dist > b.dist end)
+
+    local sameOrder = true
+    if #lastOrder ~= #toDisplay then
+        sameOrder = false
+    else
+        for i = 1, #toDisplay do
+            if lastOrder[i] ~= toDisplay[i].part then
+                sameOrder = false
+                break
+            end
+        end
+    end
+
+    -- If order changed, refresh Z-order (by hiding and showing in order)
+    if not sameOrder then
+        for _, v in ipairs(toDisplay) do
+            if v.objs.label then v.objs.label.Visible = false end
+            if v.objs.dist then v.objs.dist.Visible = false end
+        end
+        for _, v in ipairs(toDisplay) do
+            if v.objs.label then v.objs.label.Visible = true end
+            if v.objs.dist then v.objs.dist.Visible = true end
+        end
+        lastOrder = {}
+        for i, v in ipairs(toDisplay) do lastOrder[i] = v.part end
+    end
+
+    -- Update drawing positions and text per frame (minimal work)
+    for _, v in ipairs(toDisplay) do
+        local part, objs, data, dist, screenPos = v.part, v.objs, v.data, v.dist, v.screenPos
+        -- Label
+        if objs.label then
+            objs.label.Text = data.espLabel or ""
+            objs.label.Color = data.espColor
+            objs.label.Position = Vector2.new(screenPos.X, screenPos.Y)
+        end
+        -- Distance below label
+        if data.showDistance and objs.dist then
+            local distValue = math.floor(dist + 0.5) - DISTANCE_HEADSTART
+            objs.dist.Text = ("[%d]"):format(distValue)
+            local yOffset = (objs.label.TextBounds.Y / 2) + (objs.dist.TextBounds.Y / 2) + distanceYOffset
+            objs.dist.Position = Vector2.new(screenPos.X, screenPos.Y + yOffset)
+            objs.dist.Color = data.espColor
+        end
+    end
+end)
