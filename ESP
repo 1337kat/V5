@@ -15,7 +15,8 @@ local n = {
   {partName="Hitbox", partSize=Vector3.new(4.5,6.75,2.25), espLabel="l", espColor=Color3.new(1,0,0)},
   {partName="Plastics2", partSize=Vector3.new(5.546261787414551, 1.9555978775024414, 3.854473352432251), espLabel="ATV", espColor=Color3.new(1.000000, 0.000000, 0.000000)},
   {partName = "Prim", partSize = Vector3.new(1.8424512147903442, 3.0965967178344727, 0.9474747776985168), espLabel = "Gas", espColor = Color3.new(1.000000, 0.098039, 0.000000)},
-  {partName="Frame", partSize=Vector3.new(6.3781023025512695, 10.241004943847656, 34.129459381103516), espLabel="Chopper", espColor=Color3.new(1,0,0)}
+  {partName="Frame", partSize=Vector3.new(6.3781023025512695, 10.241004943847656, 34.129459381103516), espLabel="Chopper", espColor=Color3.new(1,0,0)},
+  {partName="Hull", partSize=Vector3.new(12.083436965942383, 6.691596984863281, 28.874725341796875), espLabel="Boat", espColor=Color3.new(1, 0.2, 0.6)}
 }
 
 local function o(p, q, r)
