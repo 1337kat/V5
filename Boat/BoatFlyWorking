@@ -1,0 +1,213 @@
+-- Ultimate Physics-Nuke Hover: Boat is 100% still when idle, no matter water or force!
+local Players = game:GetService("Players")
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local RunService = cloneref(game:GetService("RunService"))
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+if not LPH_JIT_MAX then
+    LPH_JIT_MAX = function(...) return ... end
+end
+
+local cheat = {
+    connections = { renderstepped = {} },
+    flyModule = {}
+}
+
+RunService.RenderStepped:Connect(function(dt)
+    for _, func in pairs(cheat.connections.renderstepped) do
+        func(dt)
+    end
+end)
+
+cheat.utility = {}
+cheat.utility.new_renderstepped = function(func)
+    cheat.connections.renderstepped[func] = func
+    return {
+        Disconnect = function()
+            cheat.connections.renderstepped[func] = nil
+        end
+    }
+end
+
+do
+    local isFlying = false
+    local flyConn = nil
+    local speed = 347
+    local boat, middle, lastdir = nil, nil, Vector3.new(1, 0, 0)
+    local desiredPosition, desiredOrientation = nil, nil
+    local bodyPosition, alignOrientation = nil, nil
+
+    local BoatIdentifiers = {
+        {"Hull", "Metal"},
+    }
+
+    local function getMiddle()
+        local ok, result = pcall(function()
+            return Workspace:WaitForChild("Const", 2)
+                :WaitForChild("Ignore", 2)
+                :WaitForChild("LocalCharacter", 2)
+                :WaitForChild("Middle", 2)
+        end)
+        return ok and result or nil
+    end
+
+    local function resetState()
+        boat = nil
+        middle = nil
+        lastdir = Vector3.new(1, 0, 0)
+        desiredPosition = nil
+        desiredOrientation = nil
+        if bodyPosition then bodyPosition:Destroy(); bodyPosition = nil end
+        if alignOrientation then alignOrientation:Destroy(); alignOrientation = nil end
+    end
+
+    LocalPlayer.CharacterAdded:Connect(function()
+        isFlying = false
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        resetState()
+    end)
+
+    local function findNearestBoat()
+        boat = nil
+        local closest = math.huge
+        local origin = middle and middle.Position or Camera.CFrame.Position
+
+        for _, model in pairs(Workspace:GetChildren()) do
+            if model:IsA("Model") then
+                for _, group in ipairs(BoatIdentifiers) do
+                    local allFound = true
+                    for _, name in ipairs(group) do
+                        if not model:FindFirstChild(name) then
+                            allFound = false
+                            break
+                        end
+                    end
+                    if allFound then
+                        local refPart = model:FindFirstChild(group[1])
+                        if refPart and refPart:IsA("BasePart") then
+                            local dist = (refPart.Position - origin).Magnitude
+                            if dist < closest then
+                                closest = dist
+                                boat = model
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    local function lockBoat(hull)
+        -- Lock Position
+        if not bodyPosition then
+            bodyPosition = Instance.new("BodyPosition")
+            bodyPosition.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bodyPosition.D = 1000
+            bodyPosition.P = 1e5
+            bodyPosition.Parent = hull
+        end
+        bodyPosition.Position = desiredPosition
+
+        -- Lock Orientation
+        if not alignOrientation then
+            alignOrientation = Instance.new("AlignOrientation")
+            alignOrientation.MaxTorque = 1e9
+            alignOrientation.Responsiveness = 200
+            alignOrientation.Parent = hull
+        end
+        alignOrientation.CFrame = desiredOrientation
+
+        -- Zero all velocities and override any physics instantly
+        hull.AssemblyLinearVelocity = Vector3.zero
+        hull.AssemblyAngularVelocity = Vector3.zero
+        hull.Velocity = Vector3.zero
+        hull.RotVelocity = Vector3.zero
+        hull.Anchored = false -- Just in case
+    end
+
+    local function unlockBoat()
+        if bodyPosition then bodyPosition:Destroy(); bodyPosition = nil end
+        if alignOrientation then alignOrientation:Destroy(); alignOrientation = nil end
+    end
+
+    local function flyStep()
+        if not isFlying then return end
+
+        middle = middle or getMiddle()
+        if not middle then return end
+
+        if not boat or (boat:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 50 then
+            findNearestBoat()
+            return
+        end
+
+        local hull = boat:FindFirstChild("Hull")
+        if not hull or not hull:IsA("BasePart") then return end
+
+        local look = Camera.CFrame.LookVector
+        look = Vector3.new(look.X, 0, look.Z).Unit
+        local dir = Vector3.zero
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Vector3.new(-look.Z, 0, look.X) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir += Vector3.new(look.Z, 0, -look.X) end
+        -- No vertical, only horizontal
+
+        local atRest = dir == Vector3.zero
+        if not atRest then
+            lastdir = dir.Unit
+        end
+
+        hull.Anchored = false
+
+        if atRest then
+            -- Save current position and orientation
+            if not desiredPosition then desiredPosition = hull.Position end
+            if not desiredOrientation then desiredOrientation = hull.CFrame end
+            lockBoat(hull)
+        else
+            -- Release lock and apply movement
+            desiredPosition = nil
+            desiredOrientation = nil
+            unlockBoat()
+            local move = lastdir
+            local velocity = Vector3.new(move.X * speed, 0, move.Z * speed)
+            hull.AssemblyLinearVelocity = velocity
+            hull.AssemblyAngularVelocity = Vector3.zero -- no spinning while moving either
+        end
+    end
+
+    local function toggleFly()
+        isFlying = not isFlying
+        warn("Boat Fly " .. (isFlying and "enabled" or "disabled"))
+
+        if isFlying then
+            resetState()
+            middle = getMiddle()
+            findNearestBoat()
+            if not flyConn then
+                flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+            end
+        else
+            if flyConn then
+                flyConn:Disconnect()
+                flyConn = nil
+            end
+            resetState()
+        end
+    end
+
+    -- Toggle with H key
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and input.KeyCode == Enum.KeyCode.H then
+            toggleFly()
+        end
+    end)
+
+    cheat.flyModule.Toggle = toggleFly
+    cheat.flyModule.IsFlying = function() return isFlying end
+end
