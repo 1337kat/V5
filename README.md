@@ -63,6 +63,7 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/CarNoclip(T)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/CarFly(H)(Z)F)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/BetterCarFly(Y)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)'
 }
 
