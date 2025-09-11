@@ -108,3 +108,72 @@ task.delay(3, function()
     end
 end)
 ```
+
+# Solara
+```
+-- ✅ Simple loadstring runner (works even on lower UNC executors)
+
+-- Track what’s been run this session
+shared.executedURLs = shared.executedURLs or {}
+shared.failedURLs = {}
+
+-- List of script URLs to run
+local scripts = {
+    'https://raw.githubusercontent.com/1337kat/V5/main/RGBKillNotifications',
+    'https://raw.githubusercontent.com/1337kat/V5/main/SwimhubSprint',
+    'https://raw.githubusercontent.com/1337kat/V5/main/MiningDrill(J)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Longneck(L)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/JetpackMod(i)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Freecam(K)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/ForceSprint(N)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/ESP',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Delete',
+    'https://raw.githubusercontent.com/1337kat/V5/main/ChunkRemoval(R)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/CarNoclip(T)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/CarFly(H)(Z)F)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Vehicle/BetterFlyOriginal',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)',
+}
+
+-- Fix () in URLs so they don’t break
+local function encodeURL(url)
+    return url:gsub("[(]", "%%28"):gsub("[)]", "%%29")
+end
+
+-- Run each loadstring once
+for _, rawUrl in ipairs(scripts) do
+    local url = encodeURL(rawUrl)
+
+    if not shared.executedURLs[url] then
+        local success, result = pcall(function()
+            local src = game:HttpGet(url, true)
+            local func = loadstring(src)
+            return func()
+        end)
+
+        if success then
+            shared.executedURLs[url] = true
+            print("✅ Executed:", url)
+        else
+            table.insert(shared.failedURLs, url)
+            warn("❌ Failed:", url, "Error:", result)
+        end
+    else
+        print("⏭️ Skipped already executed:", url)
+    end
+end
+
+-- Show failures after a short wait
+task.delay(2, function()
+    if #shared.failedURLs > 0 then
+        warn("=== ❌ Failed URLs ===")
+        for _, url in ipairs(shared.failedURLs) do
+            warn(url)
+        end
+    else
+        print("✅ All scripts executed successfully.")
+    end
+end)
+
+```
