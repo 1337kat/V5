@@ -177,3 +177,43 @@ task.delay(2, function()
 end)
 
 ```
+# FixCam (solara) - removes FPS Arms
+```
+local path = workspace.Const.Ignore:WaitForChild("FPSArms")
+local savedArms = path:Clone()
+
+-- Delete FPSArms
+local function deleteArms()
+    if workspace.Const.Ignore:FindFirstChild("FPSArms") then
+        workspace.Const.Ignore.FPSArms:Destroy()
+        print("[Arms] FPSArms deleted")
+    end
+end
+
+-- Restore FPSArms
+local function restoreArms()
+    if not workspace.Const.Ignore:FindFirstChild("FPSArms") and savedArms then
+        local newArms = savedArms:Clone()
+        newArms.Parent = workspace.Const.Ignore
+        print("[Arms] FPSArms restored")
+    end
+end
+
+-- Toggle keybind (press L)
+local UserInputService = game:GetService("UserInputService")
+local mode = false
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.L then
+        if mode then
+            restoreArms()
+            mode = false
+        else
+            deleteArms()
+            mode = true
+        end
+    end
+end)
+
+```
