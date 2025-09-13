@@ -1,0 +1,39 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TCP = LocalPlayer:WaitForChild("TCP")
+
+local isSeated = false
+
+local function onSeat()
+    if not isSeated then
+        isSeated = true
+        print("[DEBUG] Seat captured → working")
+    end
+end
+
+local function onUnseat()
+    if isSeated then
+        isSeated = false
+        print("[DEBUG] Unseat captured → working")
+    end
+end
+
+-- __namecall hook
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local oldNamecall = mt.__namecall
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if self == TCP and method == "FireServer" then
+        local args = {...}
+
+        if args[1] == 16 and args[2] == 36842 and args[3] == "Use" then
+            onSeat()
+        elseif args[1] == 45 then
+            onUnseat()
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
