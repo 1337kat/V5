@@ -1,3 +1,8 @@
+## LOBBY
+```lua
+setfflag("DebugRunParallelLuaOnMainThread","True");
+```
+
 # Loader
 ```lua
 -- ✅ Central __namecall Hook Manager (must be first!)
