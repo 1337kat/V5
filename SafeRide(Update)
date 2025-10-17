@@ -1,0 +1,189 @@
+--// =============================================================
+--// Collision Toggle (T)  •  Press J = toggle upright
+--// =============================================================
+
+local Players = game:GetService('Players')
+local UserInputService = game:GetService('UserInputService')
+local Workspace = game:GetService('Workspace')
+local RunService = game:GetService('RunService')
+local LocalPlayer = Players.LocalPlayer
+
+-- States
+local uprightEnabled = true -- ✅ starts ON
+local collisionToggle = false
+local LastToggledVehicle = nil
+
+-- Identify vehicles
+local VehicleIdentifiers = {
+	{ 'Seat', 'Plastics' }, -- ATV
+	{ 'lights2', 'lights3' }, -- Car
+}
+
+-- ==============================================================
+-- Helper functions
+-- ==============================================================
+
+-- Find closest vehicle model matching identifiers
+local function GetClosestVehicle()
+	local character = Workspace:FindFirstChild('Const')
+		and Workspace.Const:FindFirstChild('Ignore')
+		and Workspace.Const.Ignore:FindFirstChild('LocalCharacter')
+
+	if not character or not character:FindFirstChild('Middle') then
+		return nil
+	end
+	local origin = character.Middle.Position
+
+	local closest, minDist = nil, math.huge
+	for _, model in ipairs(Workspace:GetChildren()) do
+		if not model:IsA('Model') then
+			continue
+		end
+		for _, ids in ipairs(VehicleIdentifiers) do
+			local ok = true
+			for _, n in ipairs(ids) do
+				if not model:FindFirstChild(n) then
+					ok = false
+					break
+				end
+			end
+			if ok then
+				local ref = model:FindFirstChild(ids[1])
+				if ref and ref:IsA('BasePart') then
+					local d = (ref.Position - origin).Magnitude
+					if d < minDist then
+						closest, minDist = model, d
+					end
+				end
+				break
+			end
+		end
+	end
+	return closest
+end
+
+-- Build yaw-only CFrame (flat orientation)
+local function YawOnlyCFrame(pos, look)
+	local flat = Vector3.new(look.X, 0, look.Z)
+	if flat.Magnitude < 1e-3 then
+		flat = Vector3.new(0, 0, -1)
+	else
+		flat = flat.Unit
+	end
+	return CFrame.lookAt(pos, pos + flat, Vector3.yAxis)
+end
+
+-- Get pivot CFrame of model
+local function GetPivot(model)
+	if model.PrimaryPart then
+		return model.PrimaryPart.CFrame
+	else
+		return model:GetPivot()
+	end
+end
+
+-- ==============================================================
+-- PERMANENT LOOP: Keeps vehicles upright when enabled
+-- ==============================================================
+RunService.Heartbeat:Connect(function()
+	if not uprightEnabled then
+		return
+	end
+
+	for _, model in ipairs(Workspace:GetChildren()) do
+		if not model:IsA('Model') then
+			continue
+		end
+
+		-- Identify as vehicle
+		local isVehicle = false
+		for _, ids in ipairs(VehicleIdentifiers) do
+			local ok = true
+			for _, n in ipairs(ids) do
+				if not model:FindFirstChild(n) then
+					ok = false
+					break
+				end
+			end
+			if ok then
+				isVehicle = true
+				break
+			end
+		end
+		if not isVehicle then
+			continue
+		end
+
+		-- Choose root
+		local root = model.PrimaryPart
+		if not root then
+			for _, d in ipairs(model:GetDescendants()) do
+				if d:IsA('BasePart') then
+					root = d
+					break
+				end
+			end
+		end
+		if not root then
+			continue
+		end
+
+		-- Zero pitch/roll spin
+		local av = root.AssemblyAngularVelocity
+		root.AssemblyAngularVelocity = Vector3.new(0, av.Y, 0)
+
+		-- Flatten model orientation
+		local pivot = GetPivot(model)
+		local flat = YawOnlyCFrame(pivot.Position, pivot.LookVector)
+		model:PivotTo(pivot:Lerp(flat, 0.35))
+	end
+end)
+
+-- ==============================================================
+-- KEYBINDS
+-- ==============================================================
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then
+		return
+	end
+
+	-- [T] Toggle vehicle collision
+	if input.KeyCode == Enum.KeyCode.T then
+		local vehicle = GetClosestVehicle()
+		if not vehicle then
+			return
+		end
+
+		if LastToggledVehicle and LastToggledVehicle ~= vehicle then
+			for _, p in ipairs(LastToggledVehicle:GetDescendants()) do
+				if p:IsA('BasePart') then
+					p.CanCollide = true
+				end
+			end
+		end
+
+		collisionToggle = not collisionToggle
+		for _, p in ipairs(vehicle:GetDescendants()) do
+			if p:IsA('BasePart') then
+				p.CanCollide = collisionToggle
+			end
+		end
+
+		LastToggledVehicle = vehicle
+		print('Vehicle Collision Toggled:', collisionToggle)
+	end
+
+	-- [J] Toggle upright stabilization
+	if input.KeyCode == Enum.KeyCode.J then
+		uprightEnabled = not uprightEnabled
+		print(uprightEnabled and '[Upright ON]' or '[Upright OFF]')
+	end
+end)
+
+-- Reset on respawn
+LocalPlayer.CharacterAdded:Connect(function()
+	collisionToggle = false
+	LastToggledVehicle = nil
+	uprightEnabled = true
+end)
