@@ -1,0 +1,61 @@
+--// =============================================================
+--//  UNIVERSAL VEHICLE CONTROL STATE DEBUGGER
+--//  Detects: Already Seated • Just Seated • Just Unseated • Seated
+--// =============================================================
+
+local RunService = game:GetService("RunService")
+
+local lastControlled = nil
+local hasPrintedInitial = false
+local gainHooked, releaseHooked = 0, 0
+
+-- Hook all GainControl / ReleaseControl in memory
+for _, obj in ipairs(getgc(true)) do
+    if type(obj) == "table" then
+        for k, v in pairs(obj) do
+            if k == "GainControl" and type(v) == "function" then
+                hookfunction(v, function(self, ...)
+                    print("[DEBUG] Just Seated:", self.model and self.model.Name or "Unknown")
+                    lastControlled = self
+                    return v(self, ...)
+                end)
+                gainHooked += 1
+            elseif k == "ReleaseControl" and type(v) == "function" then
+                hookfunction(v, function(self, ...)
+                    print("[DEBUG] Just Unseated from:", self.model and self.model.Name or "Unknown")
+                    lastControlled = nil
+                    return v(self, ...)
+                end)
+                releaseHooked += 1
+            end
+        end
+    end
+end
+
+print(string.format("[DEBUG] Hooked %d GainControl and %d ReleaseControl methods", gainHooked, releaseHooked))
+
+--// === Live status check loop ===
+RunService.Heartbeat:Connect(function()
+    -- detect current vehicle control (u20 may appear after load)
+    local controlled = rawget(getfenv(), "u20")
+    local isSeated = (typeof(controlled) == "table" and controlled.model) or lastControlled
+
+    -- Print initial state once
+    if not hasPrintedInitial then
+        hasPrintedInitial = true
+        if isSeated then
+            print("[DEBUG] Already Seated:", (isSeated.model and isSeated.model.Name) or "Unknown")
+        else
+            print("[DEBUG] Not Seated (idle)")
+        end
+    end
+
+    -- Live seated status feedback
+    if isSeated and (not lastControlled or isSeated ~= lastControlled) then
+        print("[DEBUG] Seated:", (isSeated.model and isSeated.model.Name) or "Unknown")
+        lastControlled = isSeated
+    elseif (not isSeated) and lastControlled then
+        print("[DEBUG] Unseated from:", (lastControlled.model and lastControlled.model.Name) or "Unknown")
+        lastControlled = nil
+    end
+end)
