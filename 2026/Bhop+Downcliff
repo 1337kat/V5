@@ -1,0 +1,150 @@
+--// =============================================================
+--//  CLEAN SWIM-LIKE SPEEDHACK v3 • SHIFT->C TRANSITION BUILD
+--//  • Hold Shift+C → SwimHub bhop (flat)
+--//  • Release Shift while still holding C → camera-based downhill
+--//  • Release C → stop
+--// =============================================================
+
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+-- Grab SwimHub-style parts
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+local middle = LocalCharacter:WaitForChild("Middle")
+local bottom = LocalCharacter:WaitForChild("Bottom")
+local top = LocalCharacter:WaitForChild("Top")
+
+-- Config
+local SPEED = 70
+local MIN_SPEED = 17
+local CAMERA_SPEED = 80
+local bhop_enabled = true
+local downcliff_mode = false
+local bhop_silent = false
+
+-- State
+local currentSpeed = SPEED
+local wtf = 0
+local firstActivated = false
+
+-- Helpers
+local _IsKeyDown = UserInputService.IsKeyDown
+local _Vector3_new = Vector3.new
+local _Y_AXIS = Vector3.yAxis
+local RaycastParams_new = RaycastParams.new
+
+-- Raycast params (used only for ground checking)
+local rcParams = RaycastParams_new()
+rcParams.FilterType = Enum.RaycastFilterType.Exclude
+rcParams.FilterDescendantsInstances = { ignore }
+rcParams.IgnoreWater = true
+
+local function cameraFlatLook()
+	local look = Camera.CFrame.LookVector
+	local flat = _Vector3_new(look.X, 0, look.Z)
+	if flat.Magnitude == 0 then return Vector3.zero end
+	return flat.Unit
+end
+
+local conn
+conn = RunService.RenderStepped:Connect(function(delta)
+	if bhop_silent then
+		currentSpeed = SPEED
+		wtf = 0
+		return
+	end
+
+	local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
+	local ckey  = _IsKeyDown(UserInputService, Enum.KeyCode.C)
+
+	-- Transition rule: release Shift while keeping C enters downhill
+	if not shift and ckey and firstActivated then
+		downcliff_mode = true
+	else
+		downcliff_mode = false
+	end
+
+	-- Stop entirely if neither active
+	if not (bhop_enabled and (shift and ckey or downcliff_mode)) then
+		currentSpeed = SPEED
+		wtf = 0
+		firstActivated = false
+		return
+	end
+
+	-- =============================================================
+	-- BHOP (Shift + C)
+	-- =============================================================
+	if not downcliff_mode and shift and ckey then
+		local camLook = Camera.CFrame.LookVector
+		local move = Vector3.zero
+		local flat = Vector3.new(camLook.X, 0, camLook.Z)
+		if flat.Magnitude > 0 then flat = flat.Unit else return end
+
+		if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
+		if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
+		if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+		if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+		if move.Magnitude == 0 then
+			currentSpeed = SPEED
+			wtf = 0
+			return
+		end
+
+		move = move.Unit
+		currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+		if not firstActivated then
+			firstActivated = true
+			task.wait(0.01)
+			local topCF = top.CFrame
+			local midCF = middle.CFrame
+			local botCF = bottom.CFrame
+			middle.CFrame = midCF + _Y_AXIS * 6
+			bottom.CFrame = botCF + _Y_AXIS * 6
+			top.CFrame = topCF + _Y_AXIS * 6
+		end
+
+		local yForce = (wtf < 0.85) and 0 or -7
+		local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
+		middle.AssemblyLinearVelocity = velocity
+		bottom.AssemblyLinearVelocity = velocity
+		top.AssemblyLinearVelocity = velocity
+		wtf += delta
+		return
+	end
+
+	-- =============================================================
+	-- DOWNHILL (camera-based, when Shift released but C held)
+	-- =============================================================
+	if downcliff_mode then
+		local lookDirection = Camera.CFrame.LookVector
+		if lookDirection.Magnitude == 0 then return end
+
+		local velocity = lookDirection.Unit * CAMERA_SPEED
+		middle.AssemblyLinearVelocity = velocity
+		top.AssemblyLinearVelocity = velocity
+		bottom.AssemblyLinearVelocity = velocity
+		wtf += delta
+		return
+	end
+end)
+
+local function unload()
+	if conn then
+		conn:Disconnect()
+		conn = nil
+	end
+end
+
+return {
+	unload = unload,
+	setDowncliff = function(v) downcliff_mode = v end,
+	setSilent = function(v) bhop_silent = v end,
+	setEnabled = function(v) bhop_enabled = v end
+}
