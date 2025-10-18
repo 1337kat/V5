@@ -1,0 +1,1156 @@
+local u1 = _G.NEXT
+local v2 = _G.classes
+local v3 = game:GetService("ReplicatedStorage")
+local u4 = game:GetService("RunService")
+local u5 = game:GetService("SoundService")
+local u6 = game:GetService("UserInputService")
+local u7 = v2.SendCodes
+local u8 = v2.Camera
+local u9 = v2.Sound
+local u10 = v2.UI
+local u11 = v2.NetClient
+local u12 = v2.Player
+local u13 = v2.EntityClient
+local u14 = v2.FPS
+local u15 = v2.InventoryClient
+local u16 = v2.SharedFunctions
+local u17 = require(v3.Maps.MaterialSounds)
+local u18 = require(v3.Maps.MaterialHitSounds)
+local u19 = CFrame.new
+local u20 = Vector3.new
+local u21 = CFrame.fromOrientation
+local u22 = os.clock
+local _ = math.atan2
+local u23 = Vector2.new
+local u24 = math.sin
+local u25 = math.cos
+local u26 = Enum.UserInputType.Touch
+local _ = math.sqrt
+local u27 = math.abs
+local u28 = math.clamp
+local u29 = game.Players.LocalPlayer
+local u30 = RaycastParams.new()
+u30.IgnoreWater = true
+u30.FilterDescendantsInstances = { workspace.Const.Ignore }
+u30.FilterType = Enum.RaycastFilterType.Exclude
+u30.RespectCanCollide = true
+local u31 = RaycastParams.new()
+u31.IgnoreWater = false
+u31.FilterDescendantsInstances = { workspace.Const.Ignore }
+u31.FilterType = Enum.RaycastFilterType.Exclude
+u31.RespectCanCollide = true
+local u32 = v3.LocalCharacter:Clone()
+u32.Parent = workspace.Const.Ignore
+local u33 = Instance.new("Weld")
+u33.Part0 = u32.Top
+u33.Part1 = u32.Middle
+u33.Parent = u32.Top
+u33.Enabled = false
+u33.C0 = u19(1.5, 0, 0)
+local u34 = Enum.MouseBehavior.LockCenter
+local u35 = Enum.UserInputType.Gamepad1
+local u36 = Enum.KeyCode.Thumbstick1
+local u37 = u23()
+local u38 = u20()
+local u39 = Color3.new(1, 0.254902, 0.254902)
+local u40 = u22()
+local u41 = u22()
+local u42 = u20()
+local u43 = PhysicalProperties.new(2, 0, 0, 2, 1)
+local u44 = PhysicalProperties.new(2, 0.3, 0, 1, 1)
+local u45 = PhysicalProperties.new(2, 0, 0, 2, 1)
+local u46 = PhysicalProperties.new(0.01, 0, 0, 1, 1)
+local u47 = {}
+local u48 = false
+local u49 = false
+local u50 = false
+local u51 = 0
+local u52 = -60
+local u53 = false
+local u54 = false
+local u55 = false
+local u56 = Vector3.new(0, 0, 0)
+local u57 = false
+local u58 = false
+local u59 = nil
+local u60 = false
+local u61 = 0
+local u62 = nil
+local u63 = false
+local u64 = false
+local u65 = nil
+local u66 = false
+local u67 = 0
+local u68 = false
+local u69 = false
+local u70 = false
+local u71 = nil
+local u72 = false
+local u73 = false
+local u74 = nil
+local u75 = nil
+local u76 = false
+local u77 = false
+local u78 = false
+local u79 = false
+local u80 = false
+local u81 = false
+local u82 = false
+local u83 = 0
+for v84 = 0, 127 do
+    local v85 = 1 - v84 / 127 * 2
+    local v86 = 1 - v85 * v85
+    local v87 = math.sqrt(v86)
+    local v88 = math.cos(v84) * v87
+    local v89 = math.sin(v84) * v87
+    if v85 < 0 then
+        local v90 = 128 - v84
+        local v91 = v85 - 1.35
+        u47[v90] = Vector3.new(v88, v91, v89) * 1.6
+    end
+end
+u6.InputChanged:Connect(function(p92, _) --[[Anonymous function at line 164]]
+    --[[
+    Upvalues:
+        [1] = u35
+        [2] = u36
+        [3] = u37
+        [4] = u23
+    --]]
+    if p92.UserInputType == u35 and p92.KeyCode == u36 then
+        if p92.Position.Magnitude > 0.3 then
+            u37 = u23(-p92.Position.X, p92.Position.Y)
+            return
+        end
+        u37 = u23()
+    end
+end)
+function u1.SetHasJetpack(p93) --[[Anonymous function at line 176]]
+    --[[
+    Upvalues:
+        [1] = u66
+    --]]
+    u66 = p93
+end
+function u1.SetHasFlippers(p94) --[[Anonymous function at line 184]]
+    --[[
+    Upvalues:
+        [1] = u70
+    --]]
+    u70 = p94
+end
+function u1.IsGrounded(p95) --[[Anonymous function at line 188]]
+    --[[
+    Upvalues:
+        [1] = u76
+        [2] = u77
+        [3] = u82
+        [4] = u78
+    --]]
+    local v96 = u76 or u77 or u82
+    if v96 then
+        v96 = not p95 or u78
+    end
+    return v96
+end
+function u1.IsSprinting() --[[Anonymous function at line 192]]
+    --[[
+    Upvalues:
+        [1] = u73
+        [2] = u53
+    --]]
+    local v97 = u73
+    if v97 then
+        v97 = not u53
+    end
+    return v97
+end
+function u1.IsSliding() --[[Anonymous function at line 196]]
+    --[[
+    Upvalues:
+        [1] = u53
+    --]]
+    return u53
+end
+function u1.SetSprintBlocked(p98) --[[Anonymous function at line 200]]
+    sprintBlocked = p98
+end
+function u1.Teleport(p99) --[[Anonymous function at line 204]]
+    --[[
+    Upvalues:
+        [1] = u74
+        [2] = u32
+        [3] = u19
+        [4] = u21
+    --]]
+    if not u74 then
+        u32:PivotTo(u19(p99) * u21(0, 0, -1.57))
+    end
+end
+function u1.SetVehicle(p100, p101, p102) --[[Anonymous function at line 210]]
+    --[[
+    Upvalues:
+        [1] = u33
+        [2] = u32
+        [3] = u74
+        [4] = u65
+        [5] = u48
+        [6] = u8
+        [7] = u13
+        [8] = u21
+        [9] = u14
+    --]]
+    u33.Enabled = false
+    for _, v103 in u32:GetChildren() do
+        v103.CanCollide = true
+        v103.Massless = false
+        v103.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        v103.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end
+    if u74 then
+        u65:Destroy()
+        if u48 then
+            u74:ReleaseControl()
+        end
+        u65 = nil
+        u74 = nil
+    end
+    u32.Top.CrouchForce.Enabled = true
+    u32.Middle.LinearVelocity.Enabled = true
+    u32.Bottom.Gyro.MaxTorque = Vector3.new(400000, 400000, 400000)
+    if p100 then
+        local v104 = u13.EntityMap[p100]
+        if not v104 then
+            error((("could not mount to entity %* (entity does not exist on the client)"):format(p100)))
+        end
+        for _, v105 in u32:GetChildren() do
+            v105.CanCollide = false
+            v105.Massless = true
+        end
+        u32.Top.CrouchForce.Enabled = false
+        u32.Middle.LinearVelocity.Enabled = false
+        u32.Bottom.Gyro.MaxTorque = Vector3.new(0, 0, 0)
+        u74 = v104
+        u32:PivotTo(u74.model.PrimaryPart.CFrame * p101 * u21(0, 0, -1.5707963267948966))
+        u65 = Instance.new("WeldConstraint")
+        u65.Part0 = u32.PrimaryPart
+        u65.Part1 = u74.model.PrimaryPart
+        u65.Parent = u32.PrimaryPart
+        u33.Enabled = true
+        u48 = p102
+        if u48 then
+            u14.UnEquipItem()
+            u74:GainControl()
+        end
+        u8.SetMaxRelativeLookExtentsY(u74.MaxLookExtentsY or 1.0471975511965976)
+    else
+        u8.SetMaxRelativeLookExtentsY(nil)
+    end
+end
+function u1.GetCFrame() --[[Anonymous function at line 275]]
+    --[[
+    Upvalues:
+        [1] = u32
+    --]]
+    return u32.PrimaryPart.CFrame
+end
+function u1.GetPilotedVehicle() --[[Anonymous function at line 279]]
+    --[[
+    Upvalues:
+        [1] = u48
+        [2] = u74
+    --]]
+    if u48 then
+        return u74
+    end
+end
+function u1.GetVehicle() --[[Anonymous function at line 285]]
+    --[[
+    Upvalues:
+        [1] = u74
+    --]]
+    return u74
+end
+function u1.GetMoveVector(p106, p107) --[[Anonymous function at line 301]]
+    --[[
+    Upvalues:
+        [1] = u54
+        [2] = u49
+        [3] = u79
+        [4] = u50
+        [5] = u10
+        [6] = u37
+        [7] = u20
+        [8] = u8
+        [9] = u24
+        [10] = u25
+        [11] = u28
+    --]]
+    local v108 = Vector3.new(0, 0, 0)
+    if u54 then
+        v108 = v108 + Vector3.new(1, 0, 0)
+    end
+    if u49 then
+        v108 = v108 + Vector3.new(-1, 0, 0)
+    end
+    if u79 then
+        v108 = v108 + Vector3.new(0, 0, -1)
+    end
+    if u50 then
+        v108 = v108 + Vector3.new(0, 0, 1)
+    end
+    if u10.GetShouldMouseLock() and u37.Magnitude > 0.3 then
+        v108 = v108 + u20(u37.Y, 0, -u37.X)
+    end
+    if p106 then
+        u8.GetX()
+        local v109 = u8.GetY()
+        local v110 = u24(v109)
+        local v111 = u25(v109)
+        v108 = u20(v108.X * v110 - v108.Z * v111, 0, v108.X * v111 + v108.Z * v110)
+    end
+    if p107 then
+        return u20(u28(v108.X, -1, 1), 0, (u28(v108.Z, -1, 1))), v108.Magnitude > 0.05
+    elseif v108.Magnitude > 0.05 then
+        return v108.Unit, true
+    else
+        return u20(), false
+    end
+end
+function u1.WantsToMove() --[[Anonymous function at line 339]]
+    --[[
+    Upvalues:
+        [1] = u54
+        [2] = u49
+        [3] = u79
+        [4] = u50
+        [5] = u37
+        [6] = u10
+    --]]
+    local v112 = u54 and not u49 or u49 and not u54 or (u79 and not u50 or u50 and not u79)
+    if not v112 then
+        if u37.Magnitude > 0.3 then
+            v112 = u10.GetShouldMouseLock()
+        else
+            v112 = false
+        end
+    end
+    return v112
+end
+local function u116(p113, p114, p115) --[[Anonymous function at line 343]]
+    --[[
+    Upvalues:
+        [1] = u32
+        [2] = u19
+        [3] = u8
+        [4] = u29
+        [5] = u10
+    --]]
+    u32:PivotTo(u19(p113))
+    u8.SetSubject(u32.Top)
+    u29.ReplicationFocus = u32.PrimaryPart
+    characterState = "alive"
+    u10.SetCore("FPS")
+    u10.SetHealth(p114)
+    u10.SetEnergy(p115)
+end
+function u1.Spawn(u117, u118, u119) --[[Anonymous function at line 353]]
+    --[[
+    Upvalues:
+        [1] = u71
+        [2] = u10
+        [3] = u13
+        [4] = u116
+    --]]
+    if u71 then
+        u71:Destroy()
+    end
+    u10.SetCore("loading")
+    function u13.onChunksLoaded() --[[Anonymous function at line 358]]
+        --[[
+        Upvalues:
+            [1] = u116
+            [2] = u117
+            [3] = u118
+            [4] = u119
+        --]]
+        u116(u117, u118, u119)
+    end
+end
+local function u126(p120) --[[Anonymous function at line 363]]
+    --[[
+    Upvalues:
+        [1] = u4
+    --]]
+    p120.Parent = workspace.Const.Ignore
+    for _, v121 in pairs(p120:GetDescendants()) do
+        if v121:IsA("Attachment") or (v121:IsA("Sound") or v121:IsA("Highlight")) then
+            v121:Destroy()
+        elseif v121:IsA("BasePart") then
+            v121.CollisionGroup = "VisualOnlyPhysics"
+        end
+    end
+    u4.Stepped:Wait()
+    for _, v122 in p120:GetDescendants() do
+        if v122:IsA("Motor6D") then
+            local v123 = Instance.new("Attachment")
+            local v124 = Instance.new("Attachment")
+            v123.CFrame = v122.C0
+            v124.CFrame = v122.C1
+            v123.Parent = v122.Part0
+            v124.Parent = v122.Part1
+            local v125 = Instance.new("BallSocketConstraint")
+            v125.Attachment0 = v123
+            v125.Attachment1 = v124
+            v125.Parent = v122.Part0
+            v125.LimitsEnabled = true
+            v125.TwistLimitsEnabled = true
+            v125.UpperAngle = 35
+            v125.TwistLowerAngle = -25
+            v125.TwistUpperAngle = 25
+            v122:Destroy()
+        else
+            v122:IsA("BasePart")
+        end
+    end
+end
+function u1.Kill(p127, p128) --[[Anonymous function at line 399]]
+    --[[
+    Upvalues:
+        [1] = u14
+        [2] = u1
+        [3] = u13
+        [4] = u71
+        [5] = u12
+        [6] = u19
+        [7] = u32
+        [8] = u21
+        [9] = u8
+        [10] = u126
+        [11] = u81
+        [12] = u58
+        [13] = u59
+        [14] = u53
+        [15] = u76
+        [16] = u73
+        [17] = u10
+    --]]
+    u14.UnEquipItem()
+    u1.SetVehicle(nil)
+    u13.onChunksLoaded = nil
+    if u71 then
+        u71:Destroy()
+    end
+    u71 = u12.BaseModel:Clone()
+    u71:PivotTo(u19(u32.Top.CFrame.Position + Vector3.new(0, -3, 0)) * u21(0, u8.GetY(), 0))
+    u8.SetSubject(u71.Head, true)
+    coroutine.wrap(u126)(u71)
+    u71.PrimaryPart.Anchored = false
+    u71.Head.AssemblyLinearVelocity = p127
+    characterState = "dead"
+    u81 = false
+    u58 = false
+    u59["Character.CrouchOrSlide"].BackgroundTransparency = 0.8
+    wantsToSlide = false
+    u53 = false
+    u76 = false
+    u73 = false
+    characterState = "dead"
+    sprintBlocked = false
+    u10.SetDeathInfo(unpack(p128))
+    u10.SetInventoryVisible(false)
+    u10.SetCore("easeSpawning")
+end
+function u1.MoveF(p129) --[[Anonymous function at line 433]]
+    --[[
+    Upvalues:
+        [1] = u54
+    --]]
+    u54 = p129
+end
+function u1.MoveB(p130) --[[Anonymous function at line 437]]
+    --[[
+    Upvalues:
+        [1] = u49
+    --]]
+    u49 = p130
+end
+function u1.MoveL(p131) --[[Anonymous function at line 441]]
+    --[[
+    Upvalues:
+        [1] = u79
+    --]]
+    u79 = p131
+end
+function u1.MoveR(p132) --[[Anonymous function at line 445]]
+    --[[
+    Upvalues:
+        [1] = u50
+    --]]
+    u50 = p132
+end
+local u133 = 0
+local u134 = false
+function u1.Sprint(p135) --[[Anonymous function at line 452]]
+    --[[
+    Upvalues:
+        [1] = u134
+        [2] = u1
+        [3] = u22
+        [4] = u133
+        [5] = u81
+    --]]
+    u134 = p135
+    if not u1.WantsToMove() or (p135 or u22() - u133 <= 0.5) then
+        u81 = p135
+        if p135 then
+            u133 = u22()
+        end
+    end
+end
+function u1.StopSprint() --[[Anonymous function at line 463]]
+    --[[
+    Upvalues:
+        [1] = u81
+        [2] = u73
+    --]]
+    u81 = false
+    u73 = false
+end
+function u1.ForceSlide(p136) --[[Anonymous function at line 468]]
+    --[[
+    Upvalues:
+        [1] = u58
+        [2] = u53
+        [3] = u59
+    --]]
+    u58 = p136
+    u53 = p136
+    if not p136 then
+        u59["Character.CrouchOrSlide"].BackgroundTransparency = 0.8
+    end
+end
+function u1.CrouchOrSlide(p137, p138) --[[Anonymous function at line 477]]
+    --[[
+    Upvalues:
+        [1] = u74
+        [2] = u11
+        [3] = u7
+        [4] = u26
+        [5] = u58
+        [6] = u59
+        [7] = u1
+        [8] = u73
+        [9] = u53
+    --]]
+    if characterState == "alive" then
+        if u74 then
+            u11.SendTCP(u7.EXIT_VEHICLE)
+        else
+            if p138 == u26 then
+                if p137 then
+                    u58 = not u58
+                end
+            else
+                u58 = p137
+            end
+            if u58 then
+                u59["Character.CrouchOrSlide"].BackgroundTransparency = 0.5
+                if u1.WantsToMove() and (u73 and (not u53 and u58)) then
+                    wantsToSlide = true
+                    return
+                end
+            else
+                u59["Character.CrouchOrSlide"].BackgroundTransparency = 0.8
+                wantsToSlide = false
+            end
+        end
+    else
+        return
+    end
+end
+local function u143() --[[Anonymous function at line 507]]
+    --[[
+    Upvalues:
+        [1] = u32
+        [2] = u47
+        [3] = u20
+        [4] = u30
+    --]]
+    local v139 = u32.Middle.Position
+    for _, v140 in u47 do
+        local v141 = u20(v139.X, v139.Y + 3, v139.Z) + v140 * Vector3.new(1.1, 0, 1.1)
+        local v142 = workspace:Raycast(v141, Vector3.new(0, -6, 0), u30)
+        if v142 and v142.Normal.Y < 0.9 then
+            return true
+        end
+    end
+    return false
+end
+function u1.Jump(p144, p145) --[[Anonymous function at line 521]]
+    --[[
+    Upvalues:
+        [1] = u10
+        [2] = u74
+        [3] = u11
+        [4] = u7
+        [5] = u60
+        [6] = u57
+        [7] = u76
+        [8] = u78
+        [9] = u22
+        [10] = u40
+        [11] = u53
+        [12] = u72
+    --]]
+    if p145 == Enum.UserInputType.Gamepad1 and u10.GetInventory().Visible then
+        return
+    elseif u74 then
+        if p144 then
+            u11.SendTCP(u7.EXIT_VEHICLE)
+        end
+        return
+    else
+        u60 = p144
+        if p144 then
+            if not u76 then
+                u57 = true
+            end
+            if u76 and (u78 and (characterState == "alive" and (u22() - u40 > 0.25 and not u53))) then
+                u40 = u22()
+                u72 = true
+            end
+        else
+            u57 = false
+            return
+        end
+    end
+end
+function u1.SetNoclipping(p146) --[[Anonymous function at line 554]]
+    --[[
+    Upvalues:
+        [1] = u77
+        [2] = u32
+    --]]
+    u77 = p146
+    if p146 then
+        for _, v147 in u32:GetChildren() do
+            v147.CanCollide = false
+        end
+    else
+        for _, v148 in u32:GetChildren() do
+            v148.CanCollide = true
+        end
+    end
+end
+function u1.SetStimmed(p149) --[[Anonymous function at line 567]]
+    --[[
+    Upvalues:
+        [1] = u63
+    --]]
+    u63 = p149
+    game.Lighting.StimEffect.Enabled = u63
+end
+function u1.GetModel() --[[Anonymous function at line 572]]
+    --[[
+    Upvalues:
+        [1] = u32
+    --]]
+    return u32
+end
+function u1.IsSwimming() --[[Anonymous function at line 576]]
+    --[[
+    Upvalues:
+        [1] = u82
+    --]]
+    return u82
+end
+function u1.IsAlive() --[[Anonymous function at line 580]]
+    return characterState == "alive"
+end
+function u1.IsClimbing() --[[Anonymous function at line 584]]
+    --[[
+    Upvalues:
+        [1] = u64
+    --]]
+    return u64
+end
+function comp_ang(p150, p151)
+    --[[
+    Upvalues:
+        [1] = u27
+    --]]
+    return 3.1415 - u27(u27(p150 - p151) - 3.1415)
+end
+local function u164() --[[Anonymous function at line 592]]
+    --[[
+    Upvalues:
+        [1] = u32
+        [2] = u14
+        [3] = u8
+        [4] = u47
+        [5] = u30
+        [6] = u31
+        [7] = u82
+        [8] = u64
+        [9] = u80
+    --]]
+    local v152 = u32.Middle.Position
+    local v153 = u14.GetEquippedItem()
+    if v153 then
+        v153 = v153.type == "ClimbingPick"
+    end
+    local v154 = u8.GetY()
+    local v155 = nil
+    local v156 = nil
+    local v157 = 0
+    for v158, v159 in u47 do
+        v156 = workspace:Raycast(v152, v159, u30)
+        local v160 = v159.X
+        local v161 = v159.Z
+        local v162 = math.atan2(v160, v161) + 3.141592653589793
+        local v163 = workspace:Raycast(v152 + Vector3.new(0, 3, 0), v159 - Vector3.new(0, 1, 0), u31)
+        v155 = v163 and v163.Material == Enum.Material.Water and true or v155
+        if v156 then
+            if v156.Normal.Y >= 0.4 or u82 then
+                v157 = v158
+                break
+            end
+            if (v156.Instance.Name == "#ladder" or v153 and v156.Instance.Transparency < 0.5) and comp_ang(v162, v154) < 1.25 then
+                u64 = true
+                u80 = v153
+                v157 = v158
+                break
+            end
+            v156 = nil
+        end
+    end
+    return v156, v157, v155
+end
+function updateCharacter(_, p165)
+    --[[
+    Upvalues:
+        [1] = u32
+        [2] = u82
+        [3] = u16
+        [4] = u72
+        [5] = u20
+        [6] = u14
+        [7] = u42
+        [8] = u9
+        [9] = u61
+        [10] = u73
+        [11] = u76
+        [12] = u64
+        [13] = u80
+        [14] = u164
+        [15] = u62
+        [16] = u13
+        [17] = u55
+        [18] = u51
+        [19] = u23
+        [20] = u53
+        [21] = u83
+        [22] = u11
+        [23] = u7
+        [24] = u1
+        [25] = u66
+        [26] = u57
+        [27] = u15
+        [28] = u28
+        [29] = u5
+        [30] = u58
+        [31] = u60
+        [32] = u8
+        [33] = u81
+        [34] = u70
+        [35] = u52
+        [36] = u10
+        [37] = u39
+        [38] = u63
+        [39] = u77
+        [40] = u49
+        [41] = u37
+        [42] = u54
+        [43] = u134
+        [44] = u78
+        [45] = u22
+        [46] = u41
+        [47] = u24
+        [48] = u25
+        [49] = u74
+        [50] = u67
+        [51] = u56
+        [52] = u45
+        [53] = u43
+        [54] = u143
+        [55] = u44
+        [56] = u46
+        [57] = u68
+        [58] = u18
+        [59] = u17
+        [60] = u69
+    --]]
+    local v166 = u32.Top
+    local v167 = u32.Middle
+    local v168 = u32.Bottom
+    v168.Anchored = true
+    v168.Anchored = false
+    local v169 = v167.Position
+    local v170 = u82
+    u82 = u16.IsPointInWater(v169, -2)
+    if u72 then
+        local v171 = v167.AssemblyLinearVelocity
+        local v172 = 30
+        if v171.Y > 0 then
+            local v173 = v172 - v171.Y
+            v172 = math.max(v173, 0)
+        end
+        v167.AssemblyLinearVelocity = u20(v167.AssemblyLinearVelocity.X, v172, v167.AssemblyLinearVelocity.Z)
+        u72 = false
+    end
+    if u82 and not v170 then
+        u14.UnEquipItem(nil, true)
+        if v169.Y - u42.Y <= -1 then
+            u9.Play("WaterSplash")
+        end
+        for _, v174 in u32:GetChildren() do
+            if v174:IsA("BasePart") then
+                v174.AssemblyLinearVelocity = v174.AssemblyLinearVelocity * 0.5
+            end
+        end
+    end
+    u61 = u61 + p165
+    if characterState ~= "alive" then
+        u61 = 0
+        return
+    end
+    u73 = false
+    u76 = false
+    u64 = false
+    u80 = false
+    local v175 = false
+    local v176 = nil
+    local v177, v178, v179 = u164()
+    if v177 then
+        local v180 = v177.Instance
+        v176 = v177.Material
+        u62 = u13.GetEntityFromPart(v180)
+        v175 = u62 and u62.type == "Player" and true or v175
+        u76 = true
+    else
+        u62 = nil
+    end
+    if u64 then
+        u76 = false
+    end
+    if -(u32.Middle.Position.Y - u32.Top.Position.Y + 0.4) <= 0.75 then
+        u55 = true
+    else
+        u55 = false
+    end
+    u51 = u32.Bottom.AssemblyLinearVelocity
+    local v181 = u23(u51.X, u51.Z).Magnitude
+    if u53 and v181 < u83 then
+        u53 = false
+        wantsToSlide = false
+        u11.SendTCP(u7.PLAYER_SLIDE, false)
+    end
+    local v182 = 0
+    local v183, v184 = u1.GetMoveVector(true)
+    local v185 = u66 and u57
+    if v185 then
+        if u15.GetTotalOfItem("Gasoline") > 0 then
+            v185 = not u82
+        else
+            v185 = false
+        end
+    end
+    if v185 then
+        local v186 = v168.AssemblyLinearVelocity
+        v168.AssemblyLinearVelocity = v168.AssemblyLinearVelocity:Lerp(u20(v186.x, 15, v186.z), (u28(1 - 0.75 ^ (p165 * 60), 0, 1)))
+        if not u5.Jetpack.IsPlaying then
+            u5.Jetpack:Play()
+        end
+    elseif u5.Jetpack.IsPlaying then
+        u5.JetpackEnd:Play()
+        u5.Jetpack:Stop()
+    end
+    if v184 or (u64 or (u58 or u60)) then
+        local v187 = u8.GetX()
+        u8.GetY()
+        u83 = 12
+        if u81 and not (sprintBlocked or v179) then
+            if u70 then
+                if time() - u52 > 60 then
+                    u52 = time()
+                    u10.Prompt("Flippers slow you down on land", u39, 5)
+                end
+            else
+                u83 = 18
+                u73 = true
+            end
+        end
+        if u55 then
+            u83 = 8
+        end
+        if u82 and not u70 then
+            u83 = 8
+        end
+        if u64 then
+            u83 = 5
+        end
+        if u63 then
+            u83 = u83 * 1.75
+        end
+        if u77 then
+            u83 = u83 * 3
+            if u73 then
+                u83 = u83 * 5
+            end
+        end
+        local v188 = u66 and u57
+        if v188 then
+            if u15.GetTotalOfItem("Gasoline") > 0 then
+                v188 = not u82
+            else
+                v188 = false
+            end
+        end
+        if v188 then
+            u83 = 18
+        end
+        if u77 then
+            if u49 or u37.Y < -0.3 then
+                v187 = -v187
+            else
+                v187 = not u54 and u37.Y <= 0.3 and 0 or v187
+            end
+            if u58 ~= u60 then
+                v187 = u58 and -1.5 or (u60 and 1.5 or v187)
+            end
+        end
+        local v189 = v187 * u83
+        local v190 = u83
+        local v191 = u82 and (v189 > 0 and not u16.IsPointInWater(v169, -2.1)) and 0 or v189
+        if u64 then
+            v190 = 12.5
+            if v184 then
+                if v187 >= -0.5 or u60 and not u58 then
+                    v191 = v190
+                else
+                    v191 = -v190
+                end
+            else
+                v191 = 0
+            end
+        end
+        if v184 then
+            if u77 then
+                u8.SetSwaySpeed(0)
+            else
+                u8.SetSwaySpeed(u83 * 0.1)
+            end
+        else
+            u83 = 0
+            u8.SetSwaySpeed(0)
+        end
+        local v192 = v167.LinearVelocity
+        local v193 = -v183.X * u83
+        local v194 = -v190
+        v192.VectorVelocity = u20(v193, math.clamp(v191, v194, v190) + v182, -v183.Z * u83)
+    else
+        if not u134 then
+            u81 = false
+        end
+        local v195 = u82 and u16.IsPointInWater(v169, -2.1) and 1 or v182
+        u8.SetSwaySpeed(0)
+        v167.LinearVelocity.VectorVelocity = u20(0, v195, 0)
+    end
+    if u73 and (wantsToSlide and (not u53 and (u76 and (u78 and not u82)))) then
+        u53 = true
+        local v196 = u8.GetY() + 3.1415
+        if u22() - u41 > 1.5 then
+            u41 = u22()
+            u9.Play("SlideStart")
+            local v197 = u32.PrimaryPart
+            v197.AssemblyLinearVelocity = v197.AssemblyLinearVelocity + u20(u24(v196), 0, (u25(v196))) * 25
+            u11.SendTCP(u7.PLAYER_SLIDE, true, (u20(u24(v196), 0, (u25(v196)))))
+        end
+    elseif not wantsToSlide and u53 then
+        u53 = false
+        u11.SendTCP(u7.PLAYER_SLIDE, false)
+    end
+    if u77 then
+        v167.LinearVelocity.MaxAxesForce = Vector3.new(60000, 60000, 60000)
+    elseif u64 then
+        v167.LinearVelocity.MaxAxesForce = Vector3.new(1000, 15000, 1000)
+    elseif u82 then
+        v167.LinearVelocity.MaxAxesForce = Vector3.new(10000, 15000, 10000)
+    elseif u53 then
+        v167.LinearVelocity.MaxAxesForce = Vector3.new(0, 0, 0)
+    elseif u76 then
+        v167.LinearVelocity.MaxAxesForce = Vector3.new(12000, 0, 12000)
+    else
+        v167.LinearVelocity.MaxAxesForce = Vector3.new(5500, 0, 5500)
+    end
+    if v181 > 40 and not u77 then
+        u32.PrimaryPart.AssemblyLinearVelocity = u32.PrimaryPart.AssemblyLinearVelocity.Unit * 40
+    end
+    if u58 and not (u82 or u64) then
+        local v198 = u66 and u57
+        if v198 then
+            if u15.GetTotalOfItem("Gasoline") > 0 then
+                v198 = not u82
+            else
+                v198 = false
+            end
+        end
+        if not v198 then
+            u32.Top.CrouchForce.MaxForce = 3
+            ::l138::
+            if not u74 then
+                if u64 then
+                    local v199 = u67
+                    local v200 = (u20(u56.X, u56.Y, u56.Z) - u20(v169.X, v169.Y, v169.Z)).Magnitude
+                    local v201 = p165 * 10
+                    u67 = v199 + math.min(v200, v201)
+                else
+                    u67 = u67 + (u23(u56.X, u56.Z) - u23(v169.X, v169.Z)).Magnitude
+                end
+            end
+            u56 = v169
+            if u82 then
+                v176 = Enum.Material.Water
+                v166.CustomPhysicalProperties = u45
+                v167.CustomPhysicalProperties = u43
+                v168.CustomPhysicalProperties = u43
+                u32.Top.CrouchForce.Damping = 1500
+                u32.Top.CrouchForce.MaxForce = 35000
+                u32.Top.CrouchForce.Stiffness = 16000
+                if u60 and u143() then
+                    local v202 = u32.PrimaryPart.AssemblyLinearVelocity
+                    u32.PrimaryPart.AssemblyLinearVelocity = u20(v202.X, 35, v202.Z)
+                end
+            else
+                if u53 then
+                    v168.CustomPhysicalProperties = u44
+                else
+                    v168.CustomPhysicalProperties = u43
+                end
+                u32.Top.CrouchForce.Damping = 10
+                u32.Top.CrouchForce.Stiffness = 100
+                v166.CustomPhysicalProperties = u46
+                v167.CustomPhysicalProperties = u43
+            end
+            if u67 > 6 then
+                if (u76 or (u82 or u64)) and not (u53 or v175) then
+                    u67 = 0
+                    if not u55 then
+                        u68 = not u68
+                        local v203 = u68 and -0.05 or 0
+                        if v179 and not u82 then
+                            u9.Play("Water2", v203 + math.random(-10, 10) / 350, 0)
+                        elseif u80 then
+                            u9.Play(u18[v176], v203 + math.random(-10, 10) / 350, 0)
+                        else
+                            u9.Play(u17[v176], v203 + math.random(-10, 10) / 350, 0)
+                        end
+                    end
+                end
+                if u76 and u53 then
+                    if not u5.Sliding.IsPlaying then
+                        u5.Sliding:Play()
+                    end
+                    u5.Sliding.Volume = (v181 - 8) / 65
+                    u5.Sliding.PlaybackSpeed = (v181 - 8) / 65 + 0.8
+                elseif u5.Sliding.IsPlaying then
+                    u5.Sliding:Stop()
+                    if u5.Sliding.Volume >= 0.1 and not u53 then
+                        u9.Play("SlideStop")
+                    end
+                end
+            end
+            if u61 >= 0.15 then
+                if u69 ~= u55 then
+                    u69 = u55
+                    u11.SendTCP(u7.PLAYER_CROUCH, u55)
+                end
+                u42 = v169
+                u78 = u76
+                local v204
+                if u62 then
+                    v204 = u62.id
+                else
+                    v204 = nil
+                end
+                u11.SendTCP(u7.PLAYER_MOVE, v169, u20(u8.GetX(), u8.GetY() % 6.283185307179586, 0), v204, v178)
+                u61 = u61 - 0.15
+            end
+            return
+        end
+    end
+    u32.Top.CrouchForce.MaxForce = 500
+    goto l138
+end
+u6.TouchEnded:Connect(function(p205, _) --[[Function name: TouchEnded, line 985]]
+    --[[
+    Upvalues:
+        [1] = u75
+        [2] = u37
+        [3] = u23
+    --]]
+    if u75 == p205 then
+        u75 = nil
+        u37 = u23()
+    end
+end)
+u6.TouchStarted:Connect(function(p206, _) --[[Function name: TouchStarted, line 992]]
+    --[[
+    Upvalues:
+        [1] = u6
+        [2] = u34
+        [3] = u75
+        [4] = u38
+    --]]
+    if u6.MouseBehavior == u34 then
+        local v207 = p206.Position
+        local v208 = workspace.CurrentCamera.ViewportSize
+        local v209 = v207.X / v208.X
+        local v210 = v207.Y / v208.Y
+        if v209 < 0.33 and v210 > 0.25 and true or nil then
+            u75 = p206
+            u38 = p206.Position
+        end
+    end
+end)
+u6.TouchMoved:Connect(function() --[[Function name: TouchMoved, line 999]]
+    --[[
+    Upvalues:
+        [1] = u75
+        [2] = u38
+        [3] = u37
+        [4] = u23
+        [5] = u81
+    --]]
+    if u75 then
+        local v211 = u38 - u75.Position
+        u37 = u23(v211.X, v211.Y)
+        if v211.Magnitude / workspace.CurrentCamera.ViewportSize.Y > 0.25 then
+            u81 = true
+            return
+        end
+        u81 = false
+    end
+end)
+function u1.init() --[[Anonymous function at line 1016]]
+    --[[
+    Upvalues:
+        [1] = u4
+        [2] = u59
+        [3] = u10
+    --]]
+    u4.Stepped:Connect(updateCharacter)
+    u59 = u10.GetMobileControls()
+end
+return true
