@@ -1,0 +1,396 @@
+local v1 = _G.NEXT
+local v2 = _G.classes
+local u3 = game:GetService("RunService")
+local u4 = require(game.ReplicatedStorage.Func)
+local u5 = table.find
+local u6 = table.insert
+local u7 = table.remove
+local u8 = math.min
+local u9 = math.clamp
+local u10 = CFrame.fromOrientation
+local u11 = CFrame.new
+local u12 = math.cos
+local u13 = math.sin
+local u14 = math.abs
+local _ = math.rad
+local u15 = v2.Character
+local u16 = v2.NetClient
+local u17 = v2.SendCodes
+local u18 = v2.Camera
+local u19 = {}
+local u20 = nil
+local u21 = 0
+local u22 = 0
+local u23 = 0
+v1:Inherit(v2.VehicleClient)
+v1.ExpectedPacketInterval = 0.15
+v1.PacketStructure = { "on" }
+function v1.Anchor(p24, p25) --[[Anonymous function at line 51]]
+    for _, v26 in p24.model:GetChildren() do
+        v26.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        v26.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        v26.Anchored = p25
+    end
+end
+function v1.Teleport(p27, p28, p29) --[[Anonymous function at line 60]]
+    --[[
+    Upvalues:
+        [1] = u11
+        [2] = u10
+    --]]
+    p27.pos = p28
+    p27.rot = p29
+    p27.model:PivotTo(u11(p28) * u10(p29.X, p29.Y, p29.Z))
+end
+function v1.Move(p30, p31, p32, p33, p34) --[[Anonymous function at line 67]]
+    --[[
+    Upvalues:
+        [1] = u11
+        [2] = u10
+        [3] = u5
+        [4] = u19
+        [5] = u6
+    --]]
+    p30.startCFrame = p30.goalCFrame or p30.model.PrimaryPart.CFrame
+    p30.goalCFrame = u11(p31) * u10(p32.X, p32.Y, p32.Z)
+    p30.goalProgression = 0
+    p30.steer = p33
+    local v35 = p30.pos
+    p30.pos = p31
+    p30.rot = p32
+    if not p30.clientHasOwnership then
+        if not u5(u19, p30) then
+            u6(u19, p30)
+        end
+        local v36 = p30.model
+        p30.throttle = p34
+        p30.velocity = (v35 - p31) / p30.ExpectedPacketInterval
+        local v37 = v36.PrimaryPart
+        if v37.AssemblyLinearVelocity ~= Vector3.new(0, 0, 0) then
+            v37.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            v37.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
+function v1.OnCreate(p38, _) --[[Anonymous function at line 99]]
+    if p38.on then
+        p38:SetMotorOn(true)
+    end
+    local v39 = p38.model.Hull.AlignPosition
+    local v40 = workspace:GetAttribute("WaterLevel") + 1.2
+    v39.Position = Vector3.new(0, v40, 0)
+    local _ = p38.model.PrimaryPart
+    local v41 = RaycastParams.new()
+    v41.IgnoreWater = true
+    v41.FilterDescendantsInstances = { workspace.Const.Ignore, p38.model }
+    v41.FilterType = Enum.RaycastFilterType.Exclude
+    v41.RespectCanCollide = true
+    p38.raycastParams = v41
+    p38.velocity = Vector3.new()
+    p38.throttle = 0
+end
+function v1.OnDestroy(p42, _) --[[Anonymous function at line 120]]
+    --[[
+    Upvalues:
+        [1] = u5
+        [2] = u19
+        [3] = u7
+    --]]
+    if p42.clientHasOwnership then
+        warn((("entity %* (%*) was destroyed while the client had physics ownership."):format(p42.id, p42.type)))
+        p42:ReleasePhysicsOwnership()
+    end
+    local v43 = u5(u19, p42)
+    if v43 then
+        u7(u19, v43)
+    end
+end
+local function u71(p44) --[[Anonymous function at line 141]]
+    --[[
+    Upvalues:
+        [1] = u15
+        [2] = u20
+        [3] = u14
+        [4] = u18
+        [5] = u21
+        [6] = u22
+        [7] = u23
+        [8] = u13
+        [9] = u12
+        [10] = u9
+    --]]
+    local v45, v46 = u15.GetMoveVector(false)
+    local v47 = v45.X
+    local v48 = -v45.Z
+    local v49 = u20.model
+    u14(v47)
+    local v50 = v49.PrimaryPart
+    local v51 = u20.lastY
+    local _, v52, _ = v50.CFrame:ToOrientation()
+    u20.lastY = v52
+    u18.ScrollY(v52 - v51)
+    if v46 then
+        u21 = v47
+        u22 = v48
+        u23 = v47
+        local v53 = (u21 < 0 and 1 or -1) * v48 * 0.35
+        local v54 = Vector3.new(0, 0, v53)
+        local v55 = v49.Hull.CFrame
+        local v56 = Vector3.new(v55:ToOrientation())
+        v49.Hull.Steer.AngularVelocity = Vector3.new(1, 0, 1) * (v54 - v56) + Vector3.new(0, v48, 0)
+        local v57 = v49.PrimaryPart.Orientation.Y
+        local v58 = math.rad(v57)
+        local v59 = v49.PrimaryPart.LinearVelocity
+        local v60 = u13(v58) * u21
+        local v61 = u12(v58) * u21
+        v59.VectorVelocity = Vector3.new(v60, 0, v61) * 150
+        v49.PrimaryPart.LinearVelocity.Enabled = true
+    else
+        u21 = 0
+        u22 = 0
+        v49.PrimaryPart.LinearVelocity.VectorVelocity = Vector3.new()
+        local v62 = v49.Hull.CFrame
+        local v63 = Vector3.new(v62:ToOrientation())
+        v49.Hull.Steer.AngularVelocity = Vector3.new(1, 0, 1) * (Vector3.new(0, 0, 0) - v63) + Vector3.new(0, 0, 0)
+        v49.PrimaryPart.LinearVelocity.Enabled = false
+    end
+    if u14(u21) > 0.1 then
+        local v64 = v50.MotorSound
+        local v65 = v50.MotorSound.PlaybackSpeed
+        local v66 = u9(v50.AssemblyLinearVelocity.Magnitude / 40 + 0.5, 0.5, 1)
+        local v67 = u9(1 - 0.88 ^ (p44 * 60), 0, 1)
+        v64.PlaybackSpeed = v65 + (v66 - v65) * v67
+    else
+        local v68 = v50.MotorSound
+        local v69 = v50.MotorSound.PlaybackSpeed
+        local v70 = u9(1 - 0.88 ^ (p44 * 60), 0, 1)
+        v68.PlaybackSpeed = v69 + (0.5 - v69) * v70
+    end
+end
+local function u88(p72) --[[Anonymous function at line 196]]
+    --[[
+    Upvalues:
+        [1] = u19
+        [2] = u8
+        [3] = u10
+        [4] = u15
+        [5] = u20
+        [6] = u18
+        [7] = u14
+        [8] = u9
+        [9] = u7
+    --]]
+    local v73 = 1
+    while true do
+        local v74 = u19[v73]
+        if not v74 then
+            break
+        end
+        v74.goalProgression = v74.goalProgression + p72
+        local v75 = v74.model
+        local v76 = v74.goalProgression / v74.ExpectedPacketInterval
+        local v77 = v74.model.PrimaryPart.CFrame
+        local v78 = v74.startCFrame:Lerp(v74.goalCFrame, (u8(v74.goalProgression / v74.ExpectedPacketInterval, 1)))
+        local _ = v74.raycastParams
+        u10(0, 0, time() * v74.velocity.Magnitude)
+        u10(0, 0, -time() * v74.velocity.Magnitude)
+        if not v74.clientHasOwnership then
+            v75:PivotTo(v78)
+        end
+        if u15.GetVehicle() == v74 and u20 ~= v74 then
+            local _, v79, _ = v77:ToOrientation()
+            local _, v80, _ = v78:ToOrientation()
+            u18.ScrollY(v80 - v79)
+        end
+        if u14(v74.throttle) > 0.1 then
+            local v81 = v75.PrimaryPart.MotorSound
+            local v82 = v75.PrimaryPart.MotorSound.PlaybackSpeed
+            local v83 = u9(v74.velocity.Magnitude / 40 + 0.5, 0.5, 1)
+            local v84 = u9(1 - 0.92 ^ (v74.ExpectedPacketInterval * 60), 0, 1)
+            v81.PlaybackSpeed = v82 + (v83 - v82) * v84
+        else
+            local v85 = v75.PrimaryPart.MotorSound
+            local v86 = v75.PrimaryPart.MotorSound.PlaybackSpeed
+            local v87 = u9(1 - 0.92 ^ (v74.ExpectedPacketInterval * 60), 0, 1)
+            v85.PlaybackSpeed = v86 + (0.5 - v86) * v87
+        end
+        if v76 >= 1 then
+            u7(u19, v73)
+        else
+            v73 = v73 + 1
+        end
+    end
+end
+function v1.SetMotorOn(p89, p90) --[[Anonymous function at line 238]]
+    if p90 then
+        p89.model.PrimaryPart.EngineStart:Play()
+        task.wait(0.25)
+        p89.model.PrimaryPart.MotorSound:Play()
+    else
+        p89.model.PrimaryPart.ShutDown:Play()
+        p89.model.PrimaryPart.MotorSound:Stop()
+    end
+end
+function v1.GainControl(p91) --[[Anonymous function at line 249]]
+    --[[
+    Upvalues:
+        [1] = u20
+        [2] = u3
+        [3] = u71
+    --]]
+    u20 = p91
+    local _, v92, _ = p91.model.PrimaryPart.CFrame:ToOrientation()
+    u20.lastY = v92
+    u3:BindToRenderStep("VehicleControl", Enum.RenderPriority.Character.Value, u71)
+end
+function v1.ReleaseControl(p93) --[[Anonymous function at line 256]]
+    --[[
+    Upvalues:
+        [1] = u20
+        [2] = u3
+    --]]
+    u20 = nil
+    u3:UnbindFromRenderStep("VehicleControl")
+    local v94 = p93.model
+    local v95 = v94.Hull.CFrame
+    local v96 = Vector3.new(v95:ToOrientation())
+    v94.Hull.Steer.AngularVelocity = Vector3.new(1, 0, 1) * (Vector3.new(0, 0, 0) - v96) + Vector3.new(0, 0, 0)
+    v94.PrimaryPart.LinearVelocity.Enabled = false
+end
+function v1.GainPhysicsOwnership(u97) --[[Anonymous function at line 265]]
+    --[[
+    Upvalues:
+        [1] = u5
+        [2] = u19
+        [3] = u7
+        [4] = u3
+        [5] = u20
+        [6] = u21
+        [7] = u22
+        [8] = u4
+        [9] = u16
+        [10] = u17
+    --]]
+    local v98 = u5(u19, u97)
+    if v98 then
+        u7(u19, v98)
+    end
+    local u99 = u97.ExpectedPacketInterval
+    local u100 = 0
+    local u101 = u97.model
+    local u102 = Vector3.new(0, 0, 0)
+    u97:Anchor(false)
+    local v103 = u97.Width
+    local v104 = u97.Height
+    local v105 = u97.Width
+    local u106 = Vector3.new(v103, v104, v105)
+    local u107 = u97.raycastParams
+    u97.replicationConnection = u3.RenderStepped:Connect(function(p108) --[[Anonymous function at line 282]]
+        --[[
+        Upvalues:
+            [1] = u100
+            [2] = u20
+            [3] = u97
+            [4] = u101
+            [5] = u99
+            [6] = u21
+            [7] = u22
+            [8] = u4
+            [9] = u106
+            [10] = u107
+            [11] = u102
+            [12] = u16
+            [13] = u17
+        --]]
+        u100 = u100 + p108
+        if u20 ~= u97 then
+            local v109 = u101
+            local v110 = v109.Hull.CFrame
+            local v111 = Vector3.new(v110:ToOrientation())
+            v109.Hull.Steer.AngularVelocity = Vector3.new(1, 0, 1) * (Vector3.new(0, 0, 0) - v111) + Vector3.new(0, 0, 0)
+        end
+        if u100 < u99 then
+            return
+        end
+        u100 = u100 - u99
+        local v112 = u97.model.PrimaryPart.CFrame
+        local v113 = v112.Position
+        local v114, v115, v116 = v112:ToOrientation()
+        local v117, v118
+        if u20 == u97 then
+            v117 = u21
+            v118 = u22
+        else
+            v118 = 0
+            v117 = 0
+        end
+        local v119 = nil
+        for _, v120 in u4.GetCastPointsAroundSquare(v112, u106, true) do
+            if workspace:Raycast(v113, v120, u107) then
+                v119 = v120
+                break
+            end
+        end
+        local v121 = Vector3.new(v114, v115, v116)
+        if v121 == v121 and v112.Position == v112.Position then
+            u102 = v112.Position
+            u16.SendUDP(u17.UPDATE_BODY, u97.id, v112.Position, v121, v118, v117, v119)
+        else
+            error("NAN VEHICLE POS")
+        end
+    end)
+end
+function v1.ApplyVelocity(p122, p123, p124) --[[Anonymous function at line 328]]
+    --[[
+    Upvalues:
+        [1] = u4
+        [2] = u11
+    --]]
+    local v125 = p122.model.PrimaryPart
+    if p123 then
+        v125.AssemblyLinearVelocity = p123
+    end
+    if p124 then
+        v125.AssemblyAngularVelocity = p124
+    end
+    local v126 = p122.model.PrimaryPart
+    local v127 = v126.CFrame
+    local v128 = v127.Position
+    local v129 = u4.GetCastPointsAroundSquare
+    local v130 = p122.Width
+    local v131 = p122.Height
+    local v132 = p122.Width
+    local v133 = v129(v127, Vector3.new(v130, v131, v132), true)
+    local v134 = #v133
+    local v135 = Vector3.new()
+    for _, v136 in v133 do
+        local v137 = workspace:Raycast(v128, v136, p122.raycastParams)
+        if v137 then
+            v135 = v135 + v137.Position
+        else
+            v135 = v135 + (v128 + v136)
+        end
+    end
+    p122.model:PivotTo(u11(v135 / v134) * (v126.CFrame - v126.Position))
+end
+function v1.ReleasePhysicsOwnership(p138) --[[Anonymous function at line 359]]
+    --[[
+    Upvalues:
+        [1] = u11
+        [2] = u10
+    --]]
+    p138.replicationConnection:Disconnect()
+    p138.replicationConnection = nil
+    local v139 = p138.model
+    p138:Anchor(true)
+    v139:PivotTo(u11(p138.pos) * u10(p138.rot.X, p138.rot.Y, p138.rot.Z))
+end
+function v1.init() --[[Anonymous function at line 370]]
+    --[[
+    Upvalues:
+        [1] = u3
+        [2] = u88
+    --]]
+    u3:BindToRenderStep("MoveBoats", 0, u88)
+end
+return true
