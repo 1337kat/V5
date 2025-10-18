@@ -1,6 +1,7 @@
 --// =============================================================
 --//  BOATFLY • CONSTANT VELOCITY (SELF-ORIENTED + SMOOTH STEERING)
 --//  A/D SWAPPED • TEXT-VISIBILITY AS MASTER • HARD STOP ON HIDE
+--//  SPEED = 420 (FAST VERSION)
 --// =============================================================
 
 local Players = game:GetService("Players")
@@ -27,7 +28,7 @@ end
 
 -- ===== CONFIG =====
 local CFG = {
-    Speed               = 320,                    -- constant travel speed
+    Speed               = 420,                    -- constant travel speed (boosted)
     ReacquireDist       = 60,
     UseYawUpright       = true,
     TurnRate            = math.rad(2.6),          -- smooth yaw rotation
@@ -35,14 +36,18 @@ local CFG = {
 }
 
 -- ===== STATE =====
-local isFlying = false -- mirrors text visibility; we still guard on text itself
+local isFlying = false
 local boatModel, hull, middle
 local input = {}
 local currentVel = Vector3.zero
 local BoatIdentifiers = { {"Hull","Metal"} }
 
 -- ===== HELPERS =====
-local function setVisible(v) if boatflyText then boatflyText.Visible = v end end
+local function setVisible(v)
+    if boatflyText then
+        boatflyText.Visible = v
+    end
+end
 
 local function getLV()
     if not (CFG.PreferLVWhenSeated and boatModel and boatModel.PrimaryPart) then return nil end
@@ -107,7 +112,10 @@ local function ensurePrimaryPart(m)
             pcall(function() m.PrimaryPart = h end)
         else
             for _,d in ipairs(m:GetDescendants()) do
-                if d:IsA("BasePart") then pcall(function() m.PrimaryPart = d end); break end
+                if d:IsA("BasePart") then
+                    pcall(function() m.PrimaryPart = d end)
+                    break
+                end
             end
         end
     end
@@ -134,7 +142,7 @@ end)
 
 -- ===== MAIN LOOP =====
 RunService.RenderStepped:Connect(function(dt)
-    -- MASTER GUARD: if text not visible, force stop every frame and bail
+    -- MASTER GUARD: text visibility dictates power
     if not (boatflyText and boatflyText.Visible) then
         if hull then stopMotion() end
         return
@@ -177,7 +185,7 @@ RunService.RenderStepped:Connect(function(dt)
     if input[Enum.KeyCode.W] then move += forward end
     if input[Enum.KeyCode.S] then move -= forward end
 
-    -- Apply / stop constant velocity
+    -- Apply constant velocity
     if move.Magnitude > 0 then
         currentVel = move.Unit * CFG.Speed
     else
@@ -230,4 +238,4 @@ getgenv().BoatFly = {
     end
 }
 
-print("[BoatFly Constant Velocity • Text-Master • Hard Stop] loaded.")
+print("[BoatFly Constant Velocity • Text-Master • Hard Stop] loaded with speed 420.")
