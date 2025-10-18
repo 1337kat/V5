@@ -1,0 +1,716 @@
+local u1 = _G.NEXT
+local v2 = _G.classes
+local u3 = game:GetService("ReplicatedStorage")
+local u4 = game:GetService("RunService")
+local u5 = game:GetService("Debris")
+local u6 = game:GetService("Players")
+local u7 = require(u3.Maps.MaterialSounds)
+local u8 = require(u3.Maps.MaterialHitSounds)
+local u9 = v2.SendCodes
+local u10 = v2.Sound
+local u11 = v2.NetClient
+local _ = v2.FPS
+local u12 = v2.Camera
+local _ = v2.Particle
+local u13 = v2.EntityClient
+local _ = v2.ClassTypes
+local u14 = v2.Preloader
+local u15 = v2.SharedFunctions
+u1:Inherit(v2.PlayerNPCShared)
+u1.PacketStructure = {
+    "crouching",
+    "skinColor",
+    "equippedItemData",
+    "sliding",
+    "sleeping",
+    "armor",
+    "ghost",
+    "vehicle",
+    "vehicleWeldOffset",
+    "jetpackEnabled"
+}
+local u16 = {}
+local u17 = nil
+for v18 = 0, 127 do
+    local v19 = 1 - v18 / 127 * 2
+    local v20 = 1 - v19 * v19
+    local v21 = math.sqrt(v20)
+    local v22 = math.cos(v18) * v21
+    local v23 = math.sin(v18) * v21
+    if v19 < 0 then
+        local v24 = 128 - v18
+        local v25 = v19 - 1.1
+        u16[v24] = Vector3.new(v22, v25, v23) * 1.75
+    end
+end
+local u26 = Vector3.new
+local u27 = Vector2.new
+local u28 = CFrame.new
+local _ = math.clamp
+local u29 = CFrame.fromOrientation
+local u30 = math.min
+local u31 = os.clock
+local u32 = {}
+local u33 = {}
+local u34 = false
+local u35 = false
+local u36 = false
+local function u42(p37, p38, p39) --[[Anonymous function at line 72]]
+    local v40 = p37.anims
+    if v40 then
+        local v41 = v40[p38]
+        if v41 and v41.IsPlaying then
+            return
+        else
+            v40.Idle:Stop(p39)
+            v40.Slide:Stop(p39)
+            v40.Walk:Stop(p39)
+            v40.Crouch:Stop(p39)
+            v40.CrouchWalk:Stop(p39)
+            v40.Swim:Stop(p39)
+            v40.SitArmsOut:Stop(p39)
+            v40.DriverSit:Stop(p39)
+            v40.PassengerSit:Stop(p39)
+            if p38 then
+                v41:Play(p39)
+            end
+        end
+    else
+        warn("nil")
+        return
+    end
+end
+local function u48(p43) --[[Anonymous function at line 100]]
+    --[[
+    Upvalues:
+        [1] = u6
+    --]]
+    if p43.voiceChatWire or not p43.UserId then
+        return
+    else
+        local v44 = u6:GetPlayerByUserId(p43.UserId)
+        if v44 then
+            local v45 = v44:FindFirstChild("AudioDeviceInput")
+            if v45 then
+                local v46 = p43.model.PrimaryPart.AudioEmitter
+                local v47 = Instance.new("Wire")
+                v47.Parent = v46
+                v47.SourceInstance = v45
+                v47.TargetInstance = v46
+                p43.voiceChatWire = v47
+            end
+        else
+            return
+        end
+    end
+end
+function u1.Sleep(p49) --[[Anonymous function at line 135]]
+    --[[
+    Upvalues:
+        [1] = u42
+    --]]
+    p49.vehicle = nil
+    p49.vehicleWeldOffset = nil
+    p49.sleeping = true
+    u42(p49, "Sleep", 1)
+    p49:SetBoosterEnabled(false)
+    p49:Slide(false)
+    p49:Crouch(false)
+    p49:UnEquipItem()
+    local v50 = p49.viewMarker
+    if v50 then
+        p49.viewMarker = nil
+        v50:Destroy()
+    end
+    local v51 = p49.viewPoint
+    if v51 then
+        p49.viewPoint = nil
+        v51:Destroy()
+    end
+    p49:UpdateOnTeam()
+    if p49.voiceChatWire then
+        p49.voiceChatWire:Destroy()
+        p49.voiceChatWire = nil
+    end
+end
+function u1.IsPlayerIdInClan(p52) --[[Anonymous function at line 161]]
+    --[[
+    Upvalues:
+        [1] = u17
+        [2] = u32
+    --]]
+    return p52 == u17 and true or table.find(u32, p52)
+end
+function Lerp(p53, p54, p55)
+    return p53 + (p54 - p53) * p55
+end
+function shortAngleDist(p56, p57)
+    local v58 = (p57 - p56) % 6.283185307179586
+    return 2 * v58 % 6.283185307179586 - v58
+end
+function angleLerp(p59, p60, p61)
+    return p59 + shortAngleDist(p59, p60) * p61
+end
+local u62 = RaycastParams.new()
+u62.FilterDescendantsInstances = { workspace.Const.Ignore }
+u62.CollisionGroup = "Players"
+u62.FilterType = Enum.RaycastFilterType.Exclude
+u62.IgnoreWater = true
+local u63 = u28()
+local u64 = u28(0, -0.4, 0)
+local u65 = u28(0, -1.2, 0)
+local u66 = u28(0, 1.15878582, 0) * u29(0, 1.5707963705062866, 0)
+local u67 = u28(0, 1.15878582, 0) * u29(0, 1.5707963705062866, -0.7)
+local u68 = u28(0, 0.722453117, 0.75)
+local u69 = u28(0, 0.722453117, -0.75)
+local u70 = u28(0, 0.722453117, 0)
+local u71 = u28(0, -0.722453117, 0)
+local function u101(p72) --[[Anonymous function at line 218]]
+    --[[
+    Upvalues:
+        [1] = u33
+        [2] = u12
+        [3] = u34
+        [4] = u32
+        [5] = u31
+        [6] = u11
+        [7] = u9
+        [8] = u30
+        [9] = u28
+        [10] = u29
+        [11] = u64
+        [12] = u65
+        [13] = u63
+        [14] = u68
+        [15] = u69
+        [16] = u70
+        [17] = u71
+        [18] = u67
+        [19] = u66
+        [20] = u35
+        [21] = u13
+        [22] = u1
+        [23] = u42
+        [24] = u15
+        [25] = u10
+        [26] = u27
+        [27] = u16
+        [28] = u62
+        [29] = u7
+        [30] = u8
+    --]]
+    for _, v73 in u33 do
+        local v74 = v73.model
+        if not v73.Name and ((v74.PrimaryPart.Position - u12:GetCFrame().Position).Magnitude < 20 or (u34 or table.find(u32, v73.id))) and u31() - v73.lastNameReq > 2 then
+            v73.lastNameReq = u31()
+            u11.SendTCP(u9.REQUEST_IDENTITY, v73.id)
+        end
+        local v75 = v73.goalProgression / 0.15
+        if not v73.sleeping then
+            v73.goalProgression = v73.goalProgression + p72
+            local v76 = v73.startPosition:Lerp(v73.goalPosition, (u30(v75, 1.5)))
+            local v77 = angleLerp(v73.startAngleX, v73.goalAngleX, (u30(v75, 1)))
+            local v78 = angleLerp(v73.startAngleY, v73.goalAngleY, (u30(v75, 1)))
+            if v73.vehicle then
+                local _, v79, _ = v74.PrimaryPart.CFrame:ToOrientation()
+                v78 = (v78 - v79) % 6.283185307179586
+                v74.Head.Neck.C1 = u64 * u29(-v77 * 0.6666666666666666, 0, 0)
+                v74.Torso.RootHip.C1 = u65 * u29(0, 0, v77 * 0.3333333333333333) * u29(0, -v78, 0)
+            else
+                v74:PivotTo(u28(v76 + Vector3.new(0, 0.525, 0)) * u29(0, v78, 0))
+                v74.Head.Neck.C1 = u64 * u29(-v77 * 0.6666666666666666, 0, 0)
+                v74.Torso.RootHip.C1 = u65 * u29(0, 0, v77 * 0.3333333333333333)
+            end
+            v73.pos = v76
+            v73.recoilOffset = v73.recoilOffset:Lerp(v73.recoilOffsetGoal, (u30(v73.recoilLerpSpeed * v75, 1)))
+            if u31() >= v73.recoilReturnBefore then
+                v73.recoilLerpSpeed = v73.recoilReturnLerpSpeed
+                v73.recoilOffsetGoal = u63
+            end
+            local v80 = v73.recoilOffset
+            v74.LeftUpperArm.LeftShoulder.C0 = u68 * u29(0, 0, -v77 * 0.6666666666666666) * v80
+            v74.RightUpperArm.RightShoulder.C0 = u69 * u29(0, 0, -v77 * 0.6666666666666666) * v80
+            local v81 = v74.Torso:FindFirstChild("CurrentItemWeld")
+            if v81 then
+                v81.C0 = u70 * u29(0, 0, -v77 * 0.6666666666666666) * v80 * u71
+            end
+            if v73.isAiming then
+                v74.Head.Neck.C0 = v74.Head.Neck.C0:Lerp(u67, (u30(v75 * 0.25, 1)))
+            else
+                v74.Head.Neck.C0 = v74.Head.Neck.C0:Lerp(u66, (u30(v75 * 0.25, 1)))
+            end
+            if u35 and u34 then
+                local v82 = v73.model
+                local v83 = v76 + (v73.crouching and Vector3.new(0, 1.511, 0) or Vector3.new(0, 2.694, 0))
+                local v84 = RaycastParams.new()
+                v84.FilterType = Enum.RaycastFilterType.Exclude
+                v84.FilterDescendantsInstances = { v82 }
+                v84.CollisionGroup = "WeaponRaycast"
+                v84.IgnoreWater = true
+                local v85 = CFrame.fromOrientation(v77, v78, 0).LookVector * 500
+                local v86 = workspace:Raycast(v83, v85, v84)
+                local v87 = v73.viewMarker
+                local v88 = v73.viewPoint
+                if v86 then
+                    local v89 = v86.Distance
+                    v87.Size = Vector3.new(0.1, 0.1, v89)
+                    v87.CFrame = CFrame.lookAt(v83, v86.Position) * CFrame.new(0, 0, -v86.Distance / 2)
+                    v88.CFrame = CFrame.new(v86.Position)
+                    local v90 = u13.GetEntityFromPart(v86.Instance)
+                    if v90 and v90:Inherits(u1) then
+                        if v86.Instance.Name == "Head" then
+                            v87.Color = Color3.new(1, 0, 0)
+                        else
+                            v87.Color = Color3.new(1, 1, 0)
+                        end
+                    else
+                        v87.Color = Color3.new(0, 1, 0)
+                    end
+                else
+                    local v91 = v85.Magnitude
+                    v87.Size = Vector3.new(0.1, 0.1, v91)
+                    v87.CFrame = CFrame.lookAt(v83, v83 + v85) * CFrame.new(0, 0, -v91 / 2)
+                    v88.CFrame = CFrame.new(0, -100, 0)
+                    v87.Color = Color3.new(0.5, 0.5, 0.5)
+                end
+            end
+            if v73.vehicle then
+                u42(v73, v73.vehicleSitAnimation or "SitArmsOut", 0.2)
+                local v92 = u13.EntityMap[v73.vehicle]
+                if v92 then
+                    v74:PivotTo(v92.model.PrimaryPart.CFrame * v73.vehicleWeldOffset * u28(Vector3.new(0, 0.525, 0)))
+                end
+            else
+                local v93 = v73.swimming
+                local v94 = u15.IsPointInWater(v76, -2)
+                v73.swimming = v94
+                if v94 and (not v93 and v76.Y - v73.startPosition.Y <= -1) then
+                    u10.PlayFromEmitter("WaterSplash", v74.PrimaryPart, math.random(-10, 10) / 350, 0)
+                end
+                local v95 = v76 - v73.lastRenderedPos
+                local v96 = u27(v95.X, v95.Z).Magnitude
+                local v97 = v73.startPosition - v73.goalPosition
+                local v98 = u27(v97.X, v97.Z).Magnitude
+                v73.lastRenderedPos = v76
+                if v73.gcIndex then
+                    local v99 = workspace:Raycast(v76, u16[v73.gcIndex] or Vector3.new(0, -3.5, 0), u62)
+                    local v100
+                    if v99 then
+                        v100 = v99.Normal.Y < 0.4
+                    else
+                        v100 = false
+                    end
+                    v73.onLadder = v100
+                    if v100 then
+                        v73.footstepProgression = v73.footstepProgression + u30(v95.Magnitude, p72 * 10)
+                    else
+                        v73.footstepProgression = v73.footstepProgression + v96
+                    end
+                    if v73.footstepProgression > 6 then
+                        if v94 then
+                            v73.footstepProgression = 0
+                            u10.PlayFromEmitter(u7[Enum.Material.Water], v74.PrimaryPart, math.random(-10, 10) / 350, 0)
+                        elseif v99 and not v73.sliding then
+                            v73.footstepProgression = 0
+                            if not v73.crouching then
+                                if v100 and (v73.equippedItem and v73.equippedItem.type == "ClimbingPick") then
+                                    u10.PlayFromEmitter(u8[v99.Material], v74.PrimaryPart, math.random(-10, 10) / 350, 0)
+                                else
+                                    u10.PlayFromEmitter(u7[v99.Material], v74.PrimaryPart, math.random(-10, 10) / 350, 0)
+                                end
+                            end
+                        end
+                    end
+                end
+                if v98 > 0.25 and not v73.jetpackEnabled then
+                    if v94 then
+                        u42(v73, "Swim", 0.2)
+                    elseif v73.sliding then
+                        u42(v73, "Slide", 0.2)
+                    elseif v73.crouching then
+                        u42(v73, "CrouchWalk", 0.2)
+                        v73.anims.CrouchWalk:AdjustSpeed(v98 * 0.35)
+                    else
+                        u42(v73, "Walk", 0.2)
+                        v73.anims.Walk:AdjustSpeed(v98 * 0.35)
+                    end
+                elseif v94 then
+                    u42(v73, "Swim", 0.2)
+                elseif v73.crouching then
+                    u42(v73, "Crouch", 0.2)
+                else
+                    u42(v73, "Idle", 0.2)
+                end
+            end
+        end
+    end
+end
+function u1.SetVehicle(p102, p103, p104, p105) --[[Anonymous function at line 399]]
+    p102.vehicle = p103
+    p102.vehicleWeldOffset = p104
+    p102.vehicleSitAnimation = p105
+end
+function u1.Move(p106, p107, p108, p109) --[[Anonymous function at line 405]]
+    p106.velocityVector = p107 - p106.goalPosition
+    p106.goalProgression = 0
+    p106.startPosition = p106.pos
+    p106.goalPosition = p107
+    p106.startAngleX = p106.goalAngleX
+    p106.startAngleY = p106.goalAngleY
+    p106.goalAngleX = p108.X
+    p106.goalAngleY = p108.Y
+    p106.gcIndex = p109
+end
+function u1.Slide(p110, p111) --[[Anonymous function at line 422]]
+    --[[
+    Upvalues:
+        [1] = u10
+    --]]
+    p110.sliding = p111
+    if p111 then
+        u10.PlayFromEmitter("SlideStart", p110.model.PrimaryPart)
+        p110.model.Head.Sliding:Play()
+    else
+        u10.PlayFromEmitter("SlideStop", p110.model.PrimaryPart)
+        p110.model.Head.Sliding:Stop()
+    end
+end
+function u1.UpdateOnTeam(p112) --[[Anonymous function at line 433]]
+    --[[
+    Upvalues:
+        [1] = u32
+        [2] = u34
+        [3] = u35
+        [4] = u36
+        [5] = u3
+    --]]
+    local v113 = p112.model
+    local v114 = u32
+    if v114 then
+        v114 = table.find(u32, p112.id)
+    end
+    if u34 then
+        local v115 = v113:FindFirstChild("hlChams") or Instance.new("Highlight")
+        v115.Name = "hlChams"
+        v115.Parent = v113
+        v115.FillTransparency = 1
+        v115.OutlineColor = Color3.new(1, 0, 1)
+        if u35 then
+            local v116 = p112.viewMarker or Instance.new("Part")
+            v116.Parent = workspace.Const.Ignore
+            v116.Transparency = 0.4
+            v116.Material = Enum.Material.Neon
+            v116.Color = Color3.new(0.0156863, 1, 0)
+            v116.Size = Vector3.new(0.15, 0.15, 15)
+            v116.CollisionGroup = "VisualOnly"
+            v116.Anchored = true
+            p112.viewMarker = v116
+            local v117 = p112.viewPoint or Instance.new("Part")
+            v117.Material = Enum.Material.Neon
+            v117.Parent = workspace.Const.Ignore
+            v117.Transparency = 0.4
+            v117.Color = Color3.new(1, 1, 0.117647)
+            v117.Shape = Enum.PartType.Ball
+            v117.Size = Vector3.new(0.5, 0.5, 0.5)
+            v117.CollisionGroup = "VisualOnly"
+            v117.Anchored = true
+            p112.viewPoint = v117
+        else
+            local v118 = p112.viewMarker
+            if v118 then
+                p112.viewMarker = nil
+                v118:Destroy()
+            end
+            local v119 = p112.viewPoint
+            if v119 then
+                p112.viewPoint = nil
+                v119:Destroy()
+            end
+        end
+        v113.Head.ESP.Enabled = true
+        v113.Head.ESP.tag.Text = p112.Name or ""
+        v114 = false
+    else
+        local v120 = v113:FindFirstChild("hlChams")
+        if v120 then
+            v120:Destroy()
+        end
+        local v121 = p112.viewMarker
+        if v121 then
+            p112.viewMarker = nil
+            v121:Destroy()
+        end
+        local v122 = p112.viewPoint
+        if v122 then
+            p112.viewPoint = nil
+            v122:Destroy()
+        end
+        v113.Head.ESP.Enabled = false
+        local v123 = v113:FindFirstChild("Infrared")
+        if u36 then
+            if not v123 then
+                u3.Infrared:Clone().Parent = v113
+            end
+        elseif v123 then
+            v123:Destroy()
+        end
+    end
+    local v124 = v113.Head
+    v124.Nametag.tag.Text = p112.Name or ""
+    v124.Teamtag.tag.Text = p112.Name or ""
+    if v114 then
+        if p112.sleeping then
+            v124.Dot.Enabled = false
+            v124.Dot2.Enabled = false
+            v124.Nametag.Enabled = false
+            v124.Teamtag.Enabled = true
+        else
+            v124.Dot.Enabled = true
+            v124.Dot2.Enabled = true
+            v124.Nametag.Enabled = false
+            v124.Teamtag.Enabled = true
+        end
+    else
+        v124.Dot.Enabled = false
+        v124.Dot2.Enabled = false
+        v124.Nametag.Enabled = true
+        v124.Teamtag.Enabled = false
+        return
+    end
+end
+function u1.SetBoosterEnabled(p125, p126) --[[Anonymous function at line 543]]
+    p125.jetpackEnabled = p126
+    p125.model.Torso.LeftBooster.Fire.Enabled = p126
+    p125.model.Torso.RightBooster.Fire.Enabled = p126
+    if p126 then
+        p125.model.Head.Jetpack:Play()
+    else
+        if p125.model.Head.Jetpack.IsPlaying then
+            p125.model.Head.JetpackEnd:Play()
+        end
+        p125.model.Head.Jetpack:Stop()
+    end
+end
+function u1.Awaken(p127) --[[Anonymous function at line 557]]
+    --[[
+    Upvalues:
+        [1] = u48
+    --]]
+    p127.sleeping = false
+    p127.anims.Sleep:Stop()
+    p127:UpdateOnTeam()
+    u48(p127)
+end
+function u1.SetClanMembers(p128, p129) --[[Anonymous function at line 565]]
+    --[[
+    Upvalues:
+        [1] = u32
+        [2] = u17
+        [3] = u33
+    --]]
+    u32 = p128 or {}
+    u17 = p129 or u17
+    for _, v130 in u33 do
+        v130:UpdateOnTeam()
+    end
+end
+function u1.SetEsp(p131, p132) --[[Anonymous function at line 575]]
+    --[[
+    Upvalues:
+        [1] = u35
+        [2] = u34
+        [3] = u33
+    --]]
+    if p132 ~= nil then
+        u35 = p132
+    end
+    if p131 ~= nil then
+        u34 = p131
+    end
+    for _, v133 in u33 do
+        v133:UpdateOnTeam()
+    end
+end
+function u1.SetInfraredEnabled(p134) --[[Anonymous function at line 588]]
+    --[[
+    Upvalues:
+        [1] = u36
+        [2] = u33
+    --]]
+    if p134 ~= u36 then
+        u36 = p134
+        for _, v135 in u33 do
+            v135:UpdateOnTeam()
+        end
+    end
+end
+function u1.SetGhost(p136, p137) --[[Anonymous function at line 599]]
+    local v138 = p136.model
+    if p137 then
+        for _, v139 in pairs(v138:GetChildren()) do
+            if v139:IsA("BasePart") then
+                v139.Transparency = 0.5
+            end
+        end
+    else
+        for _, v140 in pairs(v138:GetChildren()) do
+            if v140:IsA("BasePart") then
+                v140.Transparency = 0
+            end
+        end
+    end
+    v138.PrimaryPart.Transparency = 1
+end
+function u1.Identify(p141, p142, p143) --[[Anonymous function at line 618]]
+    --[[
+    Upvalues:
+        [1] = u48
+    --]]
+    if p141 then
+        p141.UserId = p142
+        p141.Name = p143
+        u48(p141)
+        p141:UpdateOnTeam()
+    end
+end
+function u1.OnDestroy(p144, p145, p146) --[[Anonymous function at line 629]]
+    --[[
+    Upvalues:
+        [1] = u33
+        [2] = u26
+        [3] = u5
+    --]]
+    p144:UnEquipItem()
+    u33[p144.id] = nil
+    p144.vehicle = nil
+    p144.vehicleWeldOffset = nil
+    local v147 = p144.model
+    v147.Parent = workspace.Const.Ignore
+    local v148 = p144.viewMarker
+    if v148 then
+        p144.viewMarker = nil
+        v148:Destroy()
+    end
+    local v149 = p144.viewPoint
+    if v149 then
+        p144.viewPoint = nil
+        v149:Destroy()
+    end
+    if p144.voiceChatWire then
+        p144.voiceChatWire:Destroy()
+        p144.voiceChatWire = nil
+    end
+    if p145 then
+        local v150 = v147:Clone()
+        v150.Parent = workspace.Const.Ignore
+        v150.PrimaryPart.Anchored = false
+        v150.PrimaryPart.AssemblyLinearVelocity = p146 or u26() * 0.25
+        v150.Head.AssemblyLinearVelocity = p146 or u26()
+        for _, v151 in pairs(v150:GetDescendants()) do
+            if v151:IsA("Attachment") or v151:IsA("Sound") and v151.Looped or v151:IsA("Highlight") then
+                v151:Destroy()
+            elseif v151:IsA("BasePart") then
+                v151.CollisionGroup = "VisualOnlyPhysics"
+            end
+        end
+        v150.PrimaryPart.CollisionGroup = "VisualOnly"
+        for _, v152 in pairs(v150:GetDescendants()) do
+            if v152:IsA("Motor6D") then
+                local v153 = Instance.new("Attachment")
+                local v154 = Instance.new("Attachment")
+                v153.CFrame = v152.C0
+                v154.CFrame = v152.C1
+                v153.Parent = v152.Part0
+                v154.Parent = v152.Part1
+                local v155 = Instance.new("BallSocketConstraint")
+                v155.Attachment0 = v153
+                v155.Attachment1 = v154
+                v155.Parent = v152.Part0
+                v155.LimitsEnabled = true
+                v155.TwistLimitsEnabled = true
+                v155.UpperAngle = 35
+                v155.TwistLowerAngle = 1
+                v155.TwistUpperAngle = 1
+                local v156 = Instance.new("NoCollisionConstraint")
+                v156.Parent = v152.Part0
+                v156.Part0 = v152.Part0
+                v156.Part1 = v152.Part1
+                v152:Destroy()
+            end
+        end
+        u5:AddItem(v150, 4)
+    end
+end
+function u1.OnCreate(p157, _) --[[Anonymous function at line 700]]
+    --[[
+    Upvalues:
+        [1] = u28
+        [2] = u14
+        [3] = u33
+    --]]
+    local v158 = p157.model
+    for v159, v160 in {
+        ["goalProgression"] = 0,
+        ["startPosition"] = p157.pos,
+        ["goalPosition"] = p157.pos,
+        ["startAngleX"] = p157.rot.X,
+        ["goalAngleX"] = p157.rot.X,
+        ["startAngleY"] = p157.rot.Y,
+        ["goalAngleY"] = p157.rot.Y,
+        ["lastRenderedPos"] = p157.pos,
+        ["name"] = p157.Name,
+        ["crouching"] = false,
+        ["sliding"] = false,
+        ["lastFootStepPos"] = Vector3.new(0, 0, 0),
+        ["footstepProgression"] = 0,
+        ["equippedItemData"] = nil,
+        ["handModel"] = nil,
+        ["cancelEquip"] = nil,
+        ["lastNameReq"] = 0,
+        ["recoilOffset"] = u28(),
+        ["recoilOffsetGoal"] = u28(),
+        ["recoilLerpSpeed"] = 1,
+        ["recoilReturnBefore"] = 0,
+        ["recoilReturnLerpSpeed"] = 1,
+        ["anims"] = u14.LoadPlayerAnimations(v158.AnimationController.Animator)
+    } do
+        p157[v159] = v160
+    end
+    u33[p157.id] = p157
+    p157:UpdateOnTeam()
+    v158.LeftFoot.Color = p157.skinColor
+    v158.RightFoot.Color = p157.skinColor
+    v158.LeftHand.Color = p157.skinColor
+    v158.RightHand.Color = p157.skinColor
+    v158.LeftLowerLeg.Color = p157.skinColor
+    v158.RightLowerLeg.Color = p157.skinColor
+    v158.RightLowerArm.Color = p157.skinColor
+    v158.LeftLowerArm.Color = p157.skinColor
+    v158.Head.Color = p157.skinColor
+    p157.anims.Idle:Play()
+    if p157.sleeping then
+        p157:Sleep()
+    end
+    if p157.armor then
+        p157:SetArmor(p157.armor)
+    end
+    if p157.ghost then
+        p157:SetGhost(true)
+    end
+    if p157.equippedItemData then
+        p157:EquipItem(p157.equippedItemData)
+        p157.equippedItemData = nil
+    end
+    if p157.jetpackEnabled then
+        p157:SetBoosterEnabled(true)
+    end
+end
+function u1.init() --[[Anonymous function at line 781]]
+    --[[
+    Upvalues:
+        [1] = u4
+        [2] = u101
+    --]]
+    u4:BindToRenderStep("UpdatePlayers", Enum.RenderPriority.Character.Value, u101)
+end
+return true
