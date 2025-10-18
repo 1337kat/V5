@@ -1,203 +1,233 @@
--- Ultimate WASD Toggle Flight (No Auto-Move) WITH BoatFly Indicator -- FIXED DIAGONAL BUG
+--// =============================================================
+--//  BOATFLY • CONSTANT VELOCITY (SELF-ORIENTED + SMOOTH STEERING)
+--//  A/D SWAPPED • TEXT-VISIBILITY AS MASTER • HARD STOP ON HIDE
+--// =============================================================
 
 local Players = game:GetService("Players")
-local UserInputService = cloneref(game:GetService("UserInputService"))
-local Workspace = cloneref(game:GetService("Workspace"))
-local RunService = cloneref(game:GetService("RunService"))
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
---====[ BoatFly Drawing Indicator ]====--
-local boatflyText = Drawing.new("Text")
-boatflyText.Color = Color3.fromRGB(255, 160, 40) -- Orange (change if you want)
-boatflyText.Text = "BoatFly"
-boatflyText.Size = 25
-boatflyText.Outline = true
-boatflyText.Center = false
-boatflyText.Visible = false
-
--- Position just under Jetpack (Jetpack: Y=130, BoatFly: Y=160)
-RunService.RenderStepped:Connect(function()
-    local viewportSize = Camera.ViewportSize
-    boatflyText.Position = Vector2.new(viewportSize.X - 100, 160)
-end)
-
---====[ FLIGHT LOGIC ]====--
-local cheat = {
-    connections = { renderstepped = {} },
-    flyModule = {}
-}
-
-RunService.RenderStepped:Connect(function(dt)
-    for _, func in pairs(cheat.connections.renderstepped) do
-        func(dt)
-    end
-end)
-
-cheat.utility = {}
-cheat.utility.new_renderstepped = function(func)
-    cheat.connections.renderstepped[func] = func
-    return {
-        Disconnect = function()
-            cheat.connections.renderstepped[func] = nil
-        end
-    }
+-- ===== UI =====
+local boatflyText = Drawing and Drawing.new and Drawing.new("Text") or nil
+if boatflyText then
+    boatflyText.Color = Color3.fromRGB(255,160,40)
+    boatflyText.Text = "BoatFly"
+    boatflyText.Size = 25
+    boatflyText.Outline = true
+    boatflyText.Center = false
+    boatflyText.Visible = false
+    RunService.RenderStepped:Connect(function()
+        local vs = Camera.ViewportSize
+        boatflyText.Position = Vector2.new(vs.X - 100, 160)
+    end)
 end
 
-do
-    local isFlying = false
-    local flyConn = nil
-    local inputStates = {}
+-- ===== CONFIG =====
+local CFG = {
+    Speed               = 320,                    -- constant travel speed
+    ReacquireDist       = 60,
+    UseYawUpright       = true,
+    TurnRate            = math.rad(2.6),          -- smooth yaw rotation
+    PreferLVWhenSeated  = true,
+}
 
-    local flightSpeed = 320 -- Adjust for both forward and sideways
+-- ===== STATE =====
+local isFlying = false -- mirrors text visibility; we still guard on text itself
+local boatModel, hull, middle
+local input = {}
+local currentVel = Vector3.zero
+local BoatIdentifiers = { {"Hull","Metal"} }
 
-    local boat, middle = nil, nil
+-- ===== HELPERS =====
+local function setVisible(v) if boatflyText then boatflyText.Visible = v end end
 
-    local BoatIdentifiers = {
-        {"Hull", "Metal"},
-    }
+local function getLV()
+    if not (CFG.PreferLVWhenSeated and boatModel and boatModel.PrimaryPart) then return nil end
+    return (boatModel.PrimaryPart.LinearVelocity or boatModel.PrimaryPart:FindFirstChildOfClass("LinearVelocity"))
+end
 
-    local function getMiddle()
-        local ok, result = pcall(function()
-            return Workspace:WaitForChild("Const", 2)
-                :WaitForChild("Ignore", 2)
-                :WaitForChild("LocalCharacter", 2)
-                :WaitForChild("Middle", 2)
+local function stopMotion()
+    currentVel = Vector3.zero
+    local lv = getLV()
+    if lv then
+        pcall(function()
+            lv.VectorVelocity = Vector3.zero
+            lv.Enabled = false
         end)
-        return ok and result or nil
     end
-
-    local function resetState()
-        boat = nil
-        middle = nil
+    if hull then
+        hull.AssemblyLinearVelocity = Vector3.zero
+        hull.Velocity = Vector3.zero
+        hull.AssemblyAngularVelocity = Vector3.zero
+        hull.RotVelocity = Vector3.zero
     end
+end
 
-    LocalPlayer.CharacterAdded:Connect(function()
-        isFlying = false
-        boatflyText.Visible = false
-        if flyConn then flyConn:Disconnect() flyConn = nil end
-        resetState()
+local function getMiddle()
+    local ok, res = pcall(function()
+        return Workspace:WaitForChild("Const",1)
+            :WaitForChild("Ignore",1)
+            :WaitForChild("LocalCharacter",1)
+            :WaitForChild("Middle",1)
     end)
+    return ok and res or nil
+end
 
-    local function findNearestBoat()
-        boat = nil
-        local closest = math.huge
-        local origin = middle and middle.Position or Camera.CFrame.Position
-
-        for _, model in pairs(Workspace:GetChildren()) do
-            if model:IsA("Model") then
-                for _, group in ipairs(BoatIdentifiers) do
-                    local allFound = true
-                    for _, name in ipairs(group) do
-                        if not model:FindFirstChild(name) then
-                            allFound = false
-                            break
-                        end
+local function findNearestBoat(origin: Vector3)
+    local best, bestDist = nil, math.huge
+    for _,model in ipairs(Workspace:GetChildren()) do
+        if model:IsA("Model") then
+            for _,group in ipairs(BoatIdentifiers) do
+                local okAll = true
+                for _,name in ipairs(group) do
+                    if not model:FindFirstChild(name) then okAll = false break end
+                end
+                if okAll then
+                    local ref = model:FindFirstChild(group[1])
+                    if ref and ref:IsA("BasePart") then
+                        local d = (ref.Position - origin).Magnitude
+                        if d < bestDist then best, bestDist = model, d end
                     end
-                    if allFound then
-                        local refPart = model:FindFirstChild(group[1])
-                        if refPart and refPart:IsA("BasePart") then
-                            local dist = (refPart.Position - origin).Magnitude
-                            if dist < closest then
-                                closest = dist
-                                boat = model
-                            end
-                        end
-                        break
-                    end
+                    break
                 end
             end
         end
     end
+    return best
+end
 
-    local function flyStep(dt)
-        if not isFlying then return end
+local function ensurePrimaryPart(m)
+    if not (m and m:IsA("Model")) then return end
+    if not m.PrimaryPart then
+        local h = m:FindFirstChild("Hull")
+        if h and h:IsA("BasePart") then
+            pcall(function() m.PrimaryPart = h end)
+        else
+            for _,d in ipairs(m:GetDescendants()) do
+                if d:IsA("BasePart") then pcall(function() m.PrimaryPart = d end); break end
+            end
+        end
+    end
+end
 
-        middle = middle or getMiddle()
-        if not middle then return end
+-- ===== INPUT =====
+UserInputService.InputBegan:Connect(function(io,gpe)
+    if gpe then return end
+    if io.KeyCode then
+        input[io.KeyCode] = true
+        if io.KeyCode == Enum.KeyCode.V then
+            isFlying = not isFlying
+            setVisible(isFlying)
+            warn("BoatFly: "..(isFlying and "ENABLED" or "DISABLED"))
+            if not isFlying then stopMotion() end
+        end
+    end
+end)
 
-        if not boat or (boat:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 50 then
-            findNearestBoat()
+UserInputService.InputEnded:Connect(function(io,gpe)
+    if gpe then return end
+    if io.KeyCode then input[io.KeyCode] = false end
+end)
+
+-- ===== MAIN LOOP =====
+RunService.RenderStepped:Connect(function(dt)
+    -- MASTER GUARD: if text not visible, force stop every frame and bail
+    if not (boatflyText and boatflyText.Visible) then
+        if hull then stopMotion() end
+        return
+    end
+
+    middle = middle or getMiddle()
+    local origin = (middle and middle.Position) or Camera.CFrame.Position
+
+    if (not boatModel) or (not hull) or ((hull.Position - origin).Magnitude > CFG.ReacquireDist) then
+        boatModel = findNearestBoat(origin)
+        hull = boatModel and boatModel:FindFirstChild("Hull")
+        if not (hull and hull:IsA("BasePart")) then
+            hull = nil
+            stopMotion()
             return
         end
+        ensurePrimaryPart(boatModel)
+    end
 
-        local hull = boat:FindFirstChild("Hull")
-        if not hull or not hull:IsA("BasePart") then return end
+    pcall(function()
+        if boatModel.PrimaryPart then boatModel.PrimaryPart:SetNetworkOwner(LocalPlayer) end
+        hull:SetNetworkOwner(LocalPlayer)
+        local seat = boatModel:FindFirstChildWhichIsA("Seat", true)
+        if seat then seat:SetNetworkOwner(LocalPlayer) end
+    end)
 
-        -- Fixed diagonal movement: Normalize input!
-        local move = Vector3.zero
-        local look = Camera.CFrame.LookVector
-        local right = Camera.CFrame.RightVector
+    -- Self-oriented axes
+    local forward = -hull.CFrame.LookVector
 
-        look = Vector3.new(look.X, 0, look.Z)
-        right = Vector3.new(right.X, 0, right.Z)
+    -- Smooth steering (A/D swapped)
+    local turnInput = 0
+    if input[Enum.KeyCode.A] then turnInput = 1 end
+    if input[Enum.KeyCode.D] then turnInput = -1 end
+    if turnInput ~= 0 then
+        hull.CFrame = hull.CFrame * CFrame.Angles(0, turnInput * CFG.TurnRate, 0)
+    end
 
-        if look.Magnitude > 0 then look = look.Unit else look = Vector3.new(1,0,0) end
-        if right.Magnitude > 0 then right = right.Unit else right = Vector3.new(0,0,1) end
+    -- Movement keys
+    local move = Vector3.zero
+    if input[Enum.KeyCode.W] then move += forward end
+    if input[Enum.KeyCode.S] then move -= forward end
 
-        if inputStates[Enum.KeyCode.W] then move = move + look end
-        if inputStates[Enum.KeyCode.S] then move = move - look end
-        if inputStates[Enum.KeyCode.A] then move = move - right end
-        if inputStates[Enum.KeyCode.D] then move = move + right end
+    -- Apply / stop constant velocity
+    if move.Magnitude > 0 then
+        currentVel = move.Unit * CFG.Speed
+    else
+        currentVel = Vector3.zero
+    end
 
-        if move.Magnitude > 0 then
-            move = move.Unit * flightSpeed
-            hull.AssemblyLinearVelocity = move
-            hull.Velocity = move
-        else
-            hull.AssemblyLinearVelocity = Vector3.zero
-            hull.Velocity = Vector3.zero
-        end
+    local lv = getLV()
+    if lv then
+        pcall(function()
+            if currentVel.Magnitude > 0 then
+                if lv.MaxForce and typeof(lv.MaxForce) == "number" then lv.MaxForce = math.huge end
+                if lv.MaxVectorForce and typeof(lv.MaxVectorForce) == "Vector3" then
+                    lv.MaxVectorForce = Vector3.new(math.huge, math.huge, math.huge)
+                end
+                lv.VectorVelocity = currentVel
+                lv.Enabled = true
+            else
+                lv.VectorVelocity = Vector3.zero
+                lv.Enabled = false
+            end
+        end)
+    end
 
-        hull.Anchored = false
-        hull.AssemblyAngularVelocity = Vector3.zero
-        hull.RotVelocity = Vector3.zero
+    hull.Anchored = false
+    hull.AssemblyLinearVelocity = currentVel
+    hull.Velocity = currentVel
+    hull.AssemblyAngularVelocity = Vector3.zero
+    hull.RotVelocity = Vector3.zero
 
-        -- Stay upright
+    if CFG.UseYawUpright then
         local pos = hull.Position
         local _, y, _ = hull.CFrame:ToOrientation()
         hull.CFrame = CFrame.new(pos) * CFrame.Angles(0, y, 0)
     end
+end)
 
-    -- Track keys
-    UserInputService.InputBegan:Connect(function(input, gpe)
-        if not gpe and input.KeyCode then
-            inputStates[input.KeyCode] = true
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input, gpe)
-        if not gpe and input.KeyCode then
-            inputStates[input.KeyCode] = false
-        end
-    end)
-
-    local function toggleFly()
+-- ===== OPTIONAL API =====
+getgenv().BoatFly = {
+    Toggle = function()
         isFlying = not isFlying
-        boatflyText.Visible = isFlying
-        warn("Boat Fly " .. (isFlying and "enabled" or "disabled"))
-        if isFlying then
-            resetState()
-            middle = getMiddle()
-            findNearestBoat()
-            if not flyConn then
-                flyConn = cheat.utility.new_renderstepped(flyStep)
-            end
-        else
-            if flyConn then
-                flyConn:Disconnect()
-                flyConn = nil
-            end
-            resetState()
+        setVisible(isFlying)
+        warn("BoatFly: "..(isFlying and "ENABLED" or "DISABLED"))
+        if not isFlying then stopMotion() end
+    end,
+    SetSpeed = function(s)
+        if type(s) == "number" and s > 0 then
+            CFG.Speed = s
+            warn(("BoatFly speed set to %d"):format(s))
         end
     end
+}
 
-    -- V to toggle
-    UserInputService.InputBegan:Connect(function(input, gpe)
-        if not gpe and input.KeyCode == Enum.KeyCode.V then
-            toggleFly()
-        end
-    end)
-
-    cheat.flyModule.Toggle = toggleFly
-    cheat.flyModule.IsFlying = function() return isFlying end
-end
+print("[BoatFly Constant Velocity • Text-Master • Hard Stop] loaded.")
