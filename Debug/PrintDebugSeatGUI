@@ -1,0 +1,248 @@
+--// =====================================================================
+--//  VEHICLE CONTROL DEBUGGER (TRUE HOOK • REFRESHABLE EDITION)
+--//  • Hooks all real VehicleClient GainControl / ReleaseControl funcs
+--//  • Unhook / Rehook toggle for accuracy refinement
+--//  • GUI console display + timestamped events
+--// =====================================================================
+
+local RunService = game:GetService('RunService')
+local Players = game:GetService('Players')
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild('PlayerGui')
+
+assert(
+	getgc and hookfunction,
+	'[VehicleDebugger] Executor APIs missing (getgc, hookfunction).'
+)
+
+--// ===== GUI SETUP =====
+local gui = Instance.new('ScreenGui')
+gui.Name = 'VehicleDebuggerGUI'
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = PlayerGui
+
+local frame = Instance.new('Frame')
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.BackgroundTransparency = 0.25
+frame.Size = UDim2.new(0, 360, 0, 220)
+frame.Position = UDim2.new(1, -380, 1, -240)
+frame.Parent = gui
+
+local title = Instance.new('TextLabel')
+title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, 0, 0, 24)
+title.Text = '🚗 Vehicle Control Debugger'
+title.TextColor3 = Color3.fromRGB(255, 180, 40)
+title.TextSize = 18
+title.Font = Enum.Font.Code
+title.Parent = frame
+
+local toggleButton = Instance.new('TextButton')
+toggleButton.Size = UDim2.new(0, 80, 0, 24)
+toggleButton.Position = UDim2.new(1, -90, 0, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+toggleButton.Text = 'Hooked'
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 14
+toggleButton.Font = Enum.Font.Code
+toggleButton.Parent = frame
+
+local scroll = Instance.new('ScrollingFrame')
+scroll.BackgroundTransparency = 1
+scroll.Position = UDim2.new(0, 0, 0, 26)
+scroll.Size = UDim2.new(1, 0, 1, -26)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.ScrollBarThickness = 4
+scroll.Parent = frame
+
+local layout = Instance.new('UIListLayout')
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = scroll
+
+local function timestamp()
+	return os.date('%H:%M:%S')
+end
+local function log(txt, color)
+	local lbl = Instance.new('TextLabel')
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.new(1, -6, 0, 18)
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Text = string.format('[%s] %s', timestamp(), txt)
+	lbl.TextColor3 = color or Color3.new(1, 1, 1)
+	lbl.TextSize = 14
+	lbl.Font = Enum.Font.Code
+	lbl.Parent = scroll
+	RunService.Heartbeat:Wait()
+	scroll.CanvasPosition = Vector2.new(0, scroll.CanvasSize.Y.Offset)
+end
+
+--// ===== HOOK STATE =====
+local Hooked = {}
+local gainHooked, releaseHooked = 0, 0
+local isHooked = true
+
+local gainHooks, releaseHooks = {}, {}
+
+--// ===== CORE HOOK/UNHOOK =====
+local function hookAll()
+	gainHooked, releaseHooked = 0, 0
+	local gc = getgc(true)
+
+	for _, obj in ipairs(gc) do
+		if type(obj) == 'table' then
+			for k, v in pairs(obj) do
+				if
+					k == 'GainControl'
+					and type(v) == 'function'
+					and not Hooked[v]
+				then
+					Hooked[v] = true
+					local old = v
+					local new
+					new = hookfunction(old, function(self, ...)
+						task.spawn(function()
+							log(
+								'[GainControl] Just seated → '
+									.. (
+										self.model and self.model.Name
+										or 'Unknown'
+									),
+								Color3.fromRGB(120, 255, 120)
+							)
+						end)
+						return old(self, ...)
+					end)
+					gainHooks[#gainHooks + 1] = { old = old, new = new }
+					gainHooked += 1
+				elseif
+					k == 'ReleaseControl'
+					and type(v) == 'function'
+					and not Hooked[v]
+				then
+					Hooked[v] = true
+					local old = v
+					local new
+					new = hookfunction(old, function(self, ...)
+						task.spawn(function()
+							log(
+								'[ReleaseControl] Just unseated → '
+									.. (
+										self.model and self.model.Name
+										or 'Unknown'
+									),
+								Color3.fromRGB(255, 120, 120)
+							)
+						end)
+						return old(self, ...)
+					end)
+					releaseHooks[#releaseHooks + 1] = { old = old, new = new }
+					releaseHooked += 1
+				end
+			end
+		end
+	end
+
+	log(
+		string.format(
+			'✅ Hooked %d GainControl and %d ReleaseControl',
+			gainHooked,
+			releaseHooked
+		),
+		Color3.fromRGB(255, 255, 100)
+	)
+end
+
+local function unhookAll()
+	local count = 0
+	for _, tbl in ipairs(gainHooks) do
+		if tbl.old and tbl.new then
+			hookfunction(tbl.new, tbl.old)
+			count += 1
+		end
+	end
+	for _, tbl in ipairs(releaseHooks) do
+		if tbl.old and tbl.new then
+			hookfunction(tbl.new, tbl.old)
+			count += 1
+		end
+	end
+	table.clear(gainHooks)
+	table.clear(releaseHooks)
+	table.clear(Hooked)
+	log(
+		string.format('🧹 Unhooked %d functions', count),
+		Color3.fromRGB(255, 150, 0)
+	)
+end
+
+local function toggleHook()
+	isHooked = not isHooked
+	if isHooked then
+		hookAll()
+		toggleButton.Text = 'Hooked'
+		toggleButton.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+	else
+		unhookAll()
+		toggleButton.Text = 'Unhooked'
+		toggleButton.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+	end
+end
+toggleButton.MouseButton1Click:Connect(toggleHook)
+
+-- Initial pass
+hookAll()
+
+--// ===== HUMANOID SEAT TRACKER =====
+local function getSeat()
+	local char = LocalPlayer.Character
+	if not char then
+		return
+	end
+	local hum = char:FindFirstChildOfClass('Humanoid')
+	if hum then
+		return hum.SeatPart
+	end
+end
+
+local lastSeat
+RunService.Heartbeat:Connect(function()
+	local seat = getSeat()
+	if seat ~= lastSeat then
+		if seat then
+			log(
+				'[Humanoid] Seated → '
+					.. (seat.Parent and seat.Parent.Name or 'Unknown'),
+				Color3.fromRGB(120, 255, 120)
+			)
+		elseif lastSeat then
+			log('[Humanoid] Unseated', Color3.fromRGB(255, 120, 120))
+		end
+		lastSeat = seat
+	end
+end)
+
+--// ===== VEHICLECLIENT WATCHER =====
+task.spawn(function()
+	while task.wait(1) do
+		local vc = rawget(_G, 'u20')
+			or (rawget(_G, 'classes') and _G.classes.VehicleClient)
+		if typeof(vc) == 'table' and vc.model then
+			local model = vc.model.Name
+			if vc ~= lastSeat then
+				log(
+					'[VehicleClient] Controlling → ' .. model,
+					Color3.fromRGB(120, 255, 120)
+				)
+				lastSeat = vc
+			end
+		elseif lastSeat then
+			log(
+				'[VehicleClient] Released control',
+				Color3.fromRGB(255, 120, 120)
+			)
+			lastSeat = nil
+		end
+	end
+end)
