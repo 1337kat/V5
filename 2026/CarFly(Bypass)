@@ -1,0 +1,192 @@
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local RunService = cloneref(game:GetService("RunService"))
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Fallback for LPH_JIT_MAX
+if not LPH_JIT_MAX then
+    LPH_JIT_MAX = function(...) return ... end
+end
+
+-- Main cheat structure
+local cheat = {
+    connections = { renderstepped = {} },
+    flyModule = {}
+}
+
+-- Stepped hook
+RunService.RenderStepped:Connect(function(dt)
+    for _, func in pairs(cheat.connections.renderstepped) do
+        func(dt)
+    end
+end)
+
+-- RenderStepped utility
+cheat.utility = {}
+cheat.utility.new_renderstepped = function(func)
+    cheat.connections.renderstepped[func] = func
+    return {
+        Disconnect = function()
+            cheat.connections.renderstepped[func] = nil
+        end
+    }
+end
+
+-- Fly System
+do
+    local isFlying = false
+    local flyConn = nil
+    local speed, upspeed = 347, 15
+    local car, middle, lastdir = nil, nil, Vector3.new(1, 0, 0)
+
+    local VehicleIdentifiers = {
+        {"Seat", "Plastics"},
+        {"lights2", "lights3"},
+    }
+
+    -- Get middle part
+    local function getMiddle()
+        local ok, result = pcall(function()
+            return Workspace:WaitForChild("Const", 2)
+                :WaitForChild("Ignore", 2)
+                :WaitForChild("LocalCharacter", 2)
+                :WaitForChild("Middle", 2)
+        end)
+        return ok and result or nil
+    end
+
+    -- Reset state
+    local function resetState()
+        car = nil
+        middle = nil
+        lastdir = Vector3.new(1, 0, 0)
+    end
+
+    -- Character respawn
+    LocalPlayer.CharacterAdded:Connect(function()
+        isFlying = false
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        resetState()
+    end)
+
+    -- Find nearest valid car
+    local function findNearestCar()
+        car = nil
+        local closest = math.huge
+        local origin = middle and middle.Position or Camera.CFrame.Position
+
+        for _, model in pairs(Workspace:GetChildren()) do
+            if model:IsA("Model") then
+                for _, group in ipairs(VehicleIdentifiers) do
+                    local allFound = true
+                    for _, name in ipairs(group) do
+                        if not model:FindFirstChild(name) then
+                            allFound = false
+                            break
+                        end
+                    end
+                    if allFound then
+                        local refPart = model:FindFirstChild(group[1])
+                        if refPart and refPart:IsA("BasePart") then
+                            local dist = (refPart.Position - origin).Magnitude
+                            if dist < closest then
+                                closest = dist
+                                car = model
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+
+        if car then
+            if not car.PrimaryPart then
+                car.PrimaryPart = car:FindFirstChild("Seat") or car:FindFirstChild("lights2") or car:FindFirstChildOfClass("Part") or car:FindFirstChildOfClass("MeshPart")
+            end
+        end
+    end
+
+    -- Fly logic
+    local function flyStep(dt)
+        if not isFlying then return end
+
+        middle = middle or getMiddle()
+        if not middle then return end
+
+        if not car or (car:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 50 then
+            findNearestCar()
+            return
+        end
+
+        if not car.PrimaryPart then return end
+
+        local look = Camera.CFrame.LookVector
+        look = Vector3.new(look.X, 0, look.Z).Unit
+        local dir = Vector3.zero
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Vector3.new(-look.Z, 0, look.X) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir += Vector3.new(look.Z, 0, -look.X) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.V) then dir += Vector3.yAxis end
+        if UserInputService:IsKeyDown(Enum.KeyCode.B) then dir -= Vector3.yAxis end
+
+        if dir ~= Vector3.zero then
+            lastdir = dir.Unit
+        end
+
+        local move = (dir ~= Vector3.zero and dir or lastdir)
+        local velocity = Vector3.new(move.X * speed, move.Y * upspeed, move.Z * speed)
+
+        for _, part in pairs(car:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Anchored = true
+            end
+        end
+
+        car:SetPrimaryPartCFrame(car:GetPrimaryPartCFrame() + velocity * dt)
+    end
+
+    -- Toggle fly
+    local function toggleFly()
+        isFlying = not isFlying
+        warn("Vehicle Fly " .. (isFlying and "enabled" or "disabled"))
+
+        if isFlying then
+            resetState()
+            middle = getMiddle()
+            findNearestCar()
+            if not flyConn then
+                flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+            end
+        else
+            if car then
+                for _, part in pairs(car:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.Anchored = false
+                    end
+                end
+            end
+            if flyConn then
+                flyConn:Disconnect()
+                flyConn = nil
+            end
+            resetState()
+        end
+    end
+
+    -- Bind toggle to Y key
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and input.KeyCode == Enum.KeyCode.Y then
+            toggleFly()
+        end
+    end)
+
+    -- External access (optional)
+    cheat.flyModule.Toggle = toggleFly
+    cheat.flyModule.IsFlying = function() return isFlying end
+end
