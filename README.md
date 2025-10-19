@@ -58,11 +58,11 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/ESP',
 	'https://raw.githubusercontent.com/1337kat/V5/main/Despawn(U)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/DepoLoot(B)',
-	'https://raw.githubusercontent.com/1337kat/V5/main/Delete',
 	'https://raw.githubusercontent.com/1337kat/V5/main/ChunkRemoval(R)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/2026/SafeRide(Update)',
-	'https://raw.githubusercontent.com/1337kat/V5/main/CarFly(H)(Z)F)',
     'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
+	'https://raw.githubusercontent.com/1337kat/V5/main/CarFly(H)(Z)F)',
+	'https://raw.githubusercontent.com/1337kat/V5/main/2026/CarFly(Bypass)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)'
 }
 
