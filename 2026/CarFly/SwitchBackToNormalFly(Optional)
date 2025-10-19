@@ -1,0 +1,312 @@
+-- ==============================================================
+--  CAMERA-BASED VEHICLE FLIGHT SYSTEM (CF / ALV / NORMAL COMBO)
+--  Author: Payload0
+--  Build: 10/19/25
+--  • Y  = Enable / Disable system
+--  • U  = Switch Normal ↔ Payload0 Fly
+--  • LeftShift = Descend
+-- ==============================================================
+
+local Players = game:GetService("Players")
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local RunService = cloneref(game:GetService("RunService"))
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+if not LPH_JIT_MAX then
+	LPH_JIT_MAX = function(...) return ... end
+end
+
+local cheat = { connections = { renderstepped = {} }, flyModule = {} }
+
+RunService.RenderStepped:Connect(function(dt)
+	for _, func in pairs(cheat.connections.renderstepped) do
+		func(dt)
+	end
+end)
+
+cheat.utility = {}
+cheat.utility.new_renderstepped = function(func)
+	cheat.connections.renderstepped[func] = func
+	return {
+		Disconnect = function()
+			cheat.connections.renderstepped[func] = nil
+		end
+	}
+end
+
+-- ==============================================================
+--  CAMERA-BASED FLY SYSTEM + NORMAL REVERT
+-- ==============================================================
+do
+	local isFlying = false
+	local flyConn = nil
+	local car, middle = nil, nil
+	local mode = "NORMAL" -- NORMAL | CF | ALV
+
+	local speed, upspeed = 347, 15
+	local smoothStopRate = 6.5
+	local minHeightAboveTerrain = 5
+	local smoothY = 8
+	local maxPitch = math.rad(60)
+	local descendKey = Enum.KeyCode.LeftShift
+	local descendSpeed = 500
+	local currentVelocity = Vector3.zero
+
+	local VehicleIdentifiers = {
+		{"Seat", "Plastics"},
+		{"lights2", "lights3"},
+	}
+
+	local function withAO(pp)
+		local ao = pp:FindFirstChild("__FlyAO")
+		if not ao then
+			ao = Instance.new("AlignOrientation")
+			ao.Name = "__FlyAO"
+			ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
+			ao.RigidityEnabled = false
+			ao.Responsiveness = 60
+			local att = Instance.new("Attachment")
+			att.Name = "__FlyAtt"
+			att.Parent = pp
+			ao.Attachment0 = att
+			ao.Parent = pp
+		end
+		return ao
+	end
+
+	local function getMiddle()
+		local ok, result = pcall(function()
+			return Workspace:WaitForChild("Const", 2)
+				:WaitForChild("Ignore", 2)
+				:WaitForChild("LocalCharacter", 2)
+				:WaitForChild("Middle", 2)
+		end)
+		return ok and result or nil
+	end
+
+	local function resetState()
+		currentVelocity = Vector3.zero
+		car = nil
+		middle = nil
+	end
+
+	LocalPlayer.CharacterAdded:Connect(function()
+		isFlying = false
+		if flyConn then flyConn:Disconnect() flyConn = nil end
+		resetState()
+	end)
+
+	local function findNearestCar()
+		car = nil
+		local closest = math.huge
+		local origin = middle and middle.Position or Camera.CFrame.Position
+
+		for _, model in pairs(Workspace:GetChildren()) do
+			if model:IsA("Model") then
+				for _, group in ipairs(VehicleIdentifiers) do
+					local allFound = true
+					for _, name in ipairs(group) do
+						if not model:FindFirstChild(name) then
+							allFound = false
+							break
+						end
+					end
+					if allFound then
+						local refPart = model:FindFirstChild(group[1])
+						if refPart and refPart:IsA("BasePart") then
+							local dist = (refPart.Position - origin).Magnitude
+							if dist < closest then
+								closest = dist
+								car = model
+							end
+						end
+						break
+					end
+				end
+			end
+		end
+
+		if car and not car.PrimaryPart then
+			car.PrimaryPart = car:FindFirstChild("Seat")
+				or car:FindFirstChild("lights2")
+				or car:FindFirstChildOfClass("Part")
+				or car:FindFirstChildOfClass("MeshPart")
+		end
+	end
+
+	local function getTerrainHeight(position)
+		local rayOrigin = position + Vector3.new(0, 50, 0)
+		local rayDirection = Vector3.new(0, -100, 0)
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Blacklist
+		if car then params.FilterDescendantsInstances = {car} end
+		params.IgnoreWater = true
+		local result = Workspace:Raycast(rayOrigin, rayDirection, params)
+		return result and result.Position.Y or nil
+	end
+
+	local function setAnchoredAll(m, anchored)
+		for _, part in pairs(m:GetChildren()) do
+			if part:IsA("BasePart") then
+				part.Anchored = anchored
+			end
+		end
+	end
+
+	local function trySetOwner(pp)
+		if pp and pp.SetNetworkOwner then
+			pcall(function() pp:SetNetworkOwner(LocalPlayer) end)
+		end
+	end
+
+	local function applyMotion_CF(pp, newPos, look)
+		setAnchoredAll(car, true)
+		car:SetPrimaryPartCFrame(CFrame.new(newPos, newPos + look))
+	end
+
+	local function applyMotion_ALV(pp, dt, look)
+		setAnchoredAll(car, false)
+		trySetOwner(pp)
+		pp.AssemblyLinearVelocity = currentVelocity
+		local ao = withAO(pp)
+		ao.CFrame = CFrame.lookAt(pp.Position, pp.Position + look)
+		if currentVelocity.Magnitude < 1 then
+			pp.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+
+	-- ==========================================================
+	--  FLYSTEP
+	-- ==========================================================
+	local function flyStep(dt)
+		if not isFlying or mode == "NORMAL" then return end
+		middle = middle or getMiddle()
+		if not middle then return end
+		if not car or (car:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 50 then
+			findNearestCar()
+			return
+		end
+
+		local pp = car.PrimaryPart
+		if not pp then return end
+		local camCF = Camera.CFrame
+		local look = camCF.LookVector
+		local dir = Vector3.zero
+
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += camCF.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= camCF.RightVector end
+
+		local pitch = math.asin(math.clamp(look.Y, -1, 1))
+		local pitchRatio = math.clamp(pitch / maxPitch, -1, 1)
+		local verticalVel = pitchRatio * upspeed
+		if UserInputService:IsKeyDown(descendKey) then
+			verticalVel = -descendSpeed
+		end
+
+		local targetVelocity = Vector3.new(dir.X * speed, verticalVel, dir.Z * speed)
+		local lerpRate = (dir.Magnitude > 0 and 14 or smoothStopRate)
+		currentVelocity = currentVelocity:Lerp(targetVelocity, math.clamp(dt * lerpRate, 0, 1))
+
+		local currentCFrame = car:GetPrimaryPartCFrame()
+		local newPosition = currentCFrame.Position + currentVelocity * dt
+
+		if not UserInputService:IsKeyDown(descendKey) then
+			local terrainY = getTerrainHeight(currentCFrame.Position)
+			if terrainY then
+				local minY = terrainY + minHeightAboveTerrain
+				if newPosition.Y < minY then
+					newPosition = Vector3.new(
+						newPosition.X,
+						currentCFrame.Position.Y + (minY - currentCFrame.Position.Y) * math.clamp(dt * smoothY, 0, 1),
+						newPosition.Z
+					)
+					currentVelocity = Vector3.new(
+						currentVelocity.X,
+						(newPosition.Y - currentCFrame.Position.Y)/math.max(dt, 1/240),
+						currentVelocity.Z
+					)
+				end
+			end
+		end
+
+		if mode == "CF" then
+			applyMotion_CF(pp, newPosition, look)
+		else
+			applyMotion_ALV(pp, dt, look)
+		end
+	end
+
+	-- ==========================================================
+	--  NORMAL RESTORE
+	-- ==========================================================
+	local function restoreNormal()
+		local VehicleClient = _G.classes and _G.classes.VehicleClient
+		if flyConn then flyConn:Disconnect() flyConn = nil end
+		if car and car.PrimaryPart then
+			for _, p in ipairs(car:GetChildren()) do
+				if p:IsA("BasePart") then
+					p.Anchored = false
+					p.AssemblyLinearVelocity = Vector3.zero
+					p.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+		end
+		if VehicleClient and VehicleClient.GainControl and VehicleClient.GainPhysicsOwnership then
+			pcall(function() VehicleClient:GainControl() end)
+			pcall(function() VehicleClient:GainPhysicsOwnership() end)
+		end
+		print("[Fly] Returned to normal VehicleClient control")
+	end
+
+	-- ==========================================================
+	--  TOGGLES
+	-- ==========================================================
+	local function toggleFly()
+		isFlying = not isFlying
+		warn(("[Fly] %s (%s mode)"):format(isFlying and "enabled" or "disabled", mode))
+		if isFlying and mode ~= "NORMAL" then
+			resetState()
+			middle = getMiddle()
+			findNearestCar()
+			if not flyConn then
+				flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+			end
+		elseif flyConn then
+			flyConn:Disconnect()
+			flyConn = nil
+		end
+	end
+
+	local function toggleMode()
+		if mode == "NORMAL" then
+			mode = "CF"
+			findNearestCar()
+			if not flyConn then
+				flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+			end
+			print("[Fly] Entered Payload0 Flight (CF mode)")
+		elseif mode == "CF" then
+			mode = "ALV"
+			print("[Fly] Flight mode switched → ALV")
+		else
+			mode = "NORMAL"
+			restoreNormal()
+		end
+	end
+
+	-- ==========================================================
+	--  INPUT BINDS
+	-- ==========================================================
+	UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then return end
+		if input.KeyCode == Enum.KeyCode.Y then
+			toggleFly()
+		elseif input.KeyCode == Enum.KeyCode.U then
+			toggleMode()
+		end
+	end)
+end
