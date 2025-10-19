@@ -61,7 +61,7 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/ChunkRemoval(R)',
     'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/CarFly(H)(Z)F)',
-	'https://raw.githubusercontent.com/1337kat/V5/main/2026/CarFly/CarFly(Currently%20Using)',
+	'https://raw.githubusercontent.com/1337kat/V5/refs/heads/main/2026/CarFly/Fly%20Switch%20Working!!!!%20(Currently%20best)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/2026/SafeRide(Update)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)'
 }
