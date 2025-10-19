@@ -1,0 +1,263 @@
+--// =============================================================
+--//  CAMERA-BASED FLY SYSTEM • NATURAL HOVER + FAST STOP + F-DESCEND
+--//  Update: 10/19/25
+--//  • Keeps original motion logic 100% intact
+--//  • Faster exponential stop
+--//  • Hold [F] for rapid terrain-descend (custom speed)
+--// =============================================================
+
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local RunService = cloneref(game:GetService("RunService"))
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Fallback for LPH_JIT_MAX
+if not LPH_JIT_MAX then
+    LPH_JIT_MAX = function(...) return ... end
+end
+
+-- Main structure
+local cheat = {
+    connections = { renderstepped = {} },
+    flyModule = {}
+}
+
+-- RenderStepped binding
+RunService.RenderStepped:Connect(function(dt)
+    for _, func in pairs(cheat.connections.renderstepped) do
+        func(dt)
+    end
+end)
+
+cheat.utility = {}
+cheat.utility.new_renderstepped = function(func)
+    cheat.connections.renderstepped[func] = func
+    return {
+        Disconnect = function()
+            cheat.connections.renderstepped[func] = nil
+        end
+    }
+end
+
+-- ==============================
+--  CAMERA-BASED FLY SYSTEM
+-- ==============================
+do
+    local isFlying = false
+    local flyConn = nil
+    local car, middle = nil, nil
+
+    -- Config
+    local speed, upspeed = 320, 15
+    local smoothStopRate = 6.5            -- ↑ faster deceleration
+    local minHeightAboveTerrain = 5
+    local smoothY = 8
+    local maxPitch = math.rad(60)
+    local descendKey = Enum.KeyCode.F
+    local descendSpeed = 300              -- ↓ rapid descent speed
+
+    -- Runtime
+    local currentVelocity = Vector3.zero
+
+    local VehicleIdentifiers = {
+        {"Seat", "Plastics"},
+        {"lights2", "lights3"},
+    }
+
+    local function getMiddle()
+        local ok, result = pcall(function()
+            return Workspace:WaitForChild("Const", 2)
+                :WaitForChild("Ignore", 2)
+                :WaitForChild("LocalCharacter", 2)
+                :WaitForChild("Middle", 2)
+        end)
+        return ok and result or nil
+    end
+
+    local function resetState()
+        car = nil
+        middle = nil
+        currentVelocity = Vector3.zero
+    end
+
+    LocalPlayer.CharacterAdded:Connect(function()
+        isFlying = false
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        resetState()
+    end)
+
+    local function findNearestCar()
+        car = nil
+        local closest = math.huge
+        local origin = middle and middle.Position or Camera.CFrame.Position
+
+        for _, model in pairs(Workspace:GetChildren()) do
+            if model:IsA("Model") then
+                for _, group in ipairs(VehicleIdentifiers) do
+                    local allFound = true
+                    for _, name in ipairs(group) do
+                        if not model:FindFirstChild(name) then
+                            allFound = false
+                            break
+                        end
+                    end
+                    if allFound then
+                        local refPart = model:FindFirstChild(group[1])
+                        if refPart and refPart:IsA("BasePart") then
+                            local dist = (refPart.Position - origin).Magnitude
+                            if dist < closest then
+                                closest = dist
+                                car = model
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+
+        if car and not car.PrimaryPart then
+            car.PrimaryPart = car:FindFirstChild("Seat")
+                or car:FindFirstChild("lights2")
+                or car:FindFirstChildOfClass("Part")
+                or car:FindFirstChildOfClass("MeshPart")
+        end
+    end
+
+    local function getTerrainHeight(position)
+        local rayOrigin = position + Vector3.new(0, 50, 0)
+        local rayDirection = Vector3.new(0, -100, 0)
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Blacklist
+        if car then params.FilterDescendantsInstances = {car} end
+        params.IgnoreWater = true
+        local result = Workspace:Raycast(rayOrigin, rayDirection, params)
+        return result and result.Position.Y or nil
+    end
+
+    -- Core step
+    local function flyStep(dt)
+        if not isFlying then return end
+        middle = middle or getMiddle()
+        if not middle then return end
+
+        if not car or (car:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 50 then
+            findNearestCar()
+            return
+        end
+        if not car.PrimaryPart then return end
+
+        local camCF = Camera.CFrame
+        local look = camCF.LookVector
+        local dir = Vector3.zero
+
+        -- Direction from keys
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += camCF.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= camCF.RightVector end
+
+        -- Compute pitch influence
+        local pitch = math.asin(math.clamp(look.Y, -1, 1))
+        local pitchRatio = math.clamp(pitch / maxPitch, -1, 1)
+        local verticalVel = pitchRatio * upspeed
+
+        -- F key overrides vertical velocity
+        if UserInputService:IsKeyDown(descendKey) then
+            verticalVel = -descendSpeed
+        end
+
+        -- Desired velocity
+        local targetVelocity = Vector3.new(
+            dir.X * speed,
+            verticalVel,
+            dir.Z * speed
+        )
+
+        -- Smooth blend between movement and fast stop
+        currentVelocity = currentVelocity:Lerp(
+            targetVelocity,
+            math.clamp(dt * (dir.Magnitude > 0 and 14 or smoothStopRate), 0, 1)
+        )
+
+        -- Apply motion
+        local currentCFrame = car:GetPrimaryPartCFrame()
+        local newPosition = currentCFrame.Position + currentVelocity * dt
+
+        -- Simple hover over terrain (disabled while descending)
+        if not UserInputService:IsKeyDown(descendKey) then
+            local terrainY = getTerrainHeight(currentCFrame.Position)
+            if terrainY then
+                local minY = terrainY + minHeightAboveTerrain
+                if newPosition.Y < minY then
+                    newPosition = Vector3.new(
+                        newPosition.X,
+                        currentCFrame.Position.Y + (minY - currentCFrame.Position.Y) * math.clamp(dt * smoothY, 0, 1),
+                        newPosition.Z
+                    )
+                end
+            end
+        end
+
+        for _, part in pairs(car:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Anchored = true
+            end
+        end
+
+        car:SetPrimaryPartCFrame(CFrame.new(newPosition, newPosition + camCF.LookVector))
+    end
+
+    -- Toggle flight
+    local function toggleFly()
+        isFlying = not isFlying
+        warn("Vehicle Fly " .. (isFlying and "enabled" or "disabled"))
+
+        if isFlying then
+            resetState()
+            middle = getMiddle()
+            findNearestCar()
+            if not flyConn then
+                flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+            end
+        else
+            -- Smooth disengage glide (unchanged)
+            task.spawn(function()
+                local disengageVel = currentVelocity
+                for i = 1, 80 do
+                    disengageVel = disengageVel:Lerp(Vector3.zero, 0.08)
+                    if not car or not car.PrimaryPart then break end
+                    car:SetPrimaryPartCFrame(car.PrimaryPart.CFrame + disengageVel * RunService.RenderStepped:Wait())
+                end
+            end)
+
+            -- Unanchor safely after glide
+            task.delay(1.5, function()
+                if car then
+                    for _, part in pairs(car:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Anchored = false
+                        end
+                    end
+                end
+            end)
+
+            if flyConn then flyConn:Disconnect() flyConn = nil end
+            resetState()
+        end
+    end
+
+    -- Keybind
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and input.KeyCode == Enum.KeyCode.Y then
+            toggleFly()
+        end
+    end)
+
+    -- External access
+    cheat.flyModule.Toggle = toggleFly
+    cheat.flyModule.IsFlying = function() return isFlying end
+end
