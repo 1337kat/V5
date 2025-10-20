@@ -1,0 +1,188 @@
+--// =============================================================
+--//  • Press [T] = No Vehicle Collision
+--//  • Press [B] = Cycle modes:
+--//       1️⃣ Straightener (Yaw-Level)
+--//       2️⃣ Straightened 180 (Inverted)
+--//       3️⃣ Straightened (Vertical)
+--// =============================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+--// ---- STATE CONFIGURATION
+local mode = 1
+local enabled = true
+local collisionEnabled = true
+local LastVehicle
+local modeNames = {
+	[1] = "Straightener (Yaw-Level)",
+	[2] = "Straightened 180 (Inverted)",
+	[3] = "Straightened (Vertical)"
+}
+
+local VehicleIdentifiers = {
+	{ "Seat", "Plastics" },
+	{ "lights2", "lights3" },
+}
+
+--// =============================================================
+-- UTILITIES
+-- =============================================================
+
+local function GetClosestVehicle()
+	local char = Workspace:FindFirstChild("Const")
+		and Workspace.Const:FindFirstChild("Ignore")
+		and Workspace.Const.Ignore:FindFirstChild("LocalCharacter")
+	if not char or not char:FindFirstChild("Middle") then return nil end
+
+	local origin = char.Middle.Position
+	local closest, minDist = nil, math.huge
+	for _, model in ipairs(Workspace:GetChildren()) do
+		if not model:IsA("Model") then continue end
+		for _, ids in ipairs(VehicleIdentifiers) do
+			local ok = true
+			for _, n in ipairs(ids) do
+				if not model:FindFirstChild(n) then ok = false break end
+			end
+			if ok then
+				local ref = model:FindFirstChild(ids[1])
+				if ref and ref:IsA("BasePart") then
+					local d = (ref.Position - origin).Magnitude
+					if d < minDist then
+						closest, minDist = model, d
+					end
+				end
+				break
+			end
+		end
+	end
+	return closest
+end
+
+local function GetPivot(model)
+	if model.PrimaryPart then
+		return model.PrimaryPart.CFrame
+	else
+		return model:GetPivot()
+	end
+end
+
+local function YawOnlyCFrame(pos, look)
+	local flat = Vector3.new(look.X, 0, look.Z)
+	if flat.Magnitude < 1e-3 then
+		flat = Vector3.new(0, 0, -1)
+	else
+		flat = flat.Unit
+	end
+	return CFrame.lookAt(pos, pos + flat, Vector3.yAxis)
+end
+
+local function BuildCFrameForMode(pos)
+	if mode == 2 then
+		-- Inverted vertical
+		local cf = CFrame.lookAt(pos, pos + Vector3.new(0, -1, 0), Vector3.zAxis)
+		return cf * CFrame.Angles(math.rad(-10), 0, math.rad(180))
+	elseif mode == 3 then
+		-- Upright vertical
+		local cf = CFrame.lookAt(pos, pos + Vector3.new(0, 1, 0), Vector3.zAxis)
+		return cf * CFrame.Angles(math.rad(-10), 0, 0)
+	end
+end
+
+--// =============================================================
+-- COLLISION TOGGLE + INDICATOR
+-- =============================================================
+
+local CollisionText = Drawing.new("Text")
+CollisionText.Color = Color3.new(1, 1, 1)
+CollisionText.Text = "Noclip"
+CollisionText.Visible = true
+CollisionText.Outline = true
+CollisionText.Center = false
+CollisionText.Size = 24
+
+local function updateCollisionIndicator()
+	local camera = workspace.CurrentCamera
+	local viewportSize = camera.ViewportSize
+	CollisionText.Position = Vector2.new(viewportSize.X - 180, 40)
+end
+RunService.RenderStepped:Connect(updateCollisionIndicator)
+
+local function ToggleCollision(vehicle)
+	if not vehicle then return end
+	collisionEnabled = not collisionEnabled
+
+	for _, p in ipairs(vehicle:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CanCollide = collisionEnabled
+		end
+	end
+
+	-- Update indicator
+	if collisionEnabled then
+		CollisionText.Visible = true
+		CollisionText.Text = "Collision: ON"
+	else
+		CollisionText.Visible = false
+	end
+end
+
+--// =============================================================
+-- MAIN LOOP
+-- =============================================================
+RunService.Heartbeat:Connect(function()
+	if not enabled then return end
+	local vehicle = GetClosestVehicle()
+	if not vehicle then return end
+	LastVehicle = vehicle
+
+	local pivot = GetPivot(vehicle)
+
+	-- Maintain physics active (no anchoring)
+	for _, p in ipairs(vehicle:GetDescendants()) do
+		if p:IsA("BasePart") then
+			local av = p.AssemblyAngularVelocity
+			p.AssemblyAngularVelocity = Vector3.new(0, av.Y, 0)
+		end
+	end
+
+	if mode == 1 then
+		local flat = YawOnlyCFrame(pivot.Position, pivot.LookVector)
+		vehicle:PivotTo(pivot:Lerp(flat, 0.35))
+	else
+		local target = BuildCFrameForMode(pivot.Position)
+		if target then vehicle:PivotTo(pivot:Lerp(target, 0.3)) end
+	end
+end)
+
+--// =============================================================
+-- KEYBINDS
+-- =============================================================
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+
+	if input.KeyCode == Enum.KeyCode.B then
+		mode += 1
+		if mode > 3 then mode = 1 end
+		print(string.format("[Vehicle Mode ➜ %s]", modeNames[mode]))
+
+	elseif input.KeyCode == Enum.KeyCode.T then
+		local vehicle = GetClosestVehicle()
+		if vehicle then
+			ToggleCollision(vehicle)
+			print(collisionEnabled and "[Collision: ON]" or "[Collision: OFF]")
+		end
+	end
+end)
+
+-- Reset on respawn
+LocalPlayer.CharacterAdded:Connect(function()
+	mode = 1
+	enabled = true
+	collisionEnabled = true
+	CollisionText.Visible = true
+	CollisionText.Text = "Collision: ON"
+end)
