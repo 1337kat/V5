@@ -1,0 +1,272 @@
+--// ================================================================
+--//  PAYLOAD0 • CARMODECONFIG (Secondary Priority)
+--//  • Z/F/H = activate with chosen speed (and take priority from EliteHover)
+--//  • B = cycles straightener mode (1 default). Affects orientation while active
+--//  • T = collision toggle handled by controller, not a priority
+--//  Start OFF. Controller calls Start/Stop/Hotkey().
+--// ================================================================
+
+local Players            = game:GetService("Players")
+local RunService         = game:GetService("RunService")
+local Workspace          = game:GetService("Workspace")
+local UserInputService   = game:GetService("UserInputService")
+local Camera             = Workspace.CurrentCamera
+
+local UIS, RS, WS = UserInputService, RunService, Workspace
+local Control = getgenv().Payload0Control
+
+local function CarModeSystem()
+  local active = false
+  local currentSpeed = 0
+
+  -- Your exact CarModeConfig + runtime tracking
+  local CarModeConfig = {
+      { Name = "CarMode1", Key = Enum.KeyCode.Z, Speed = 60  },
+      { Name = "CarMode2", Key = Enum.KeyCode.F, Speed = 15  },
+      { Name = "CarMode3", Key = Enum.KeyCode.H, Speed = 300 },
+  }
+
+  local userInput = UIS
+  local runService = RS
+  local currentCamera = Camera
+  local players = Players
+  local localPlayer = players.LocalPlayer
+
+  local CarModes = {}
+  for _, entry in ipairs(CarModeConfig) do
+      CarModes[entry.Name] = {
+          Key = entry.Key,
+          Speed = entry.Speed,
+          Active = false
+      }
+  end
+
+  local connections = {}
+  local flyObjects = {}
+  local rotateSpeed = math.rad(1)
+
+  -- === Original detection criteria (truncated list still includes critical parts)
+  local criteriaList = {
+      {partName = "BLWheelHub", partSize = Vector3.new(0.25, 0.25, 0.25)},
+      {partName = "lights1",   partSize = Vector3.new(3.0251893997192383, 0.6689038276672363, 5.577791213989258)},
+      {partName = "lights3",   partSize = Vector3.new(0.42277026176452637, 0.6625227928161621, 0.07328414916992188)},
+      {partName = "lights2",   partSize = Vector3.new(0.42277026176452637, 0.6625227928161621, 0.07328414916992188)},
+      {partName = "FRWheel",   partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628)},
+      {partName = "FLWheel",   partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628)},
+      {partName = "Body",      partSize = Vector3.new(6.795680046081543, 5.078634262084961, 13.125102996826172)},
+      {partName = "BRWheel",   partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628)},
+      {partName = "BLWheel",   partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628)},
+  }
+
+  -- === Utilities (exact)
+  local function isMatchingSize(partSize, targetSize, tolerance)
+      tolerance = tolerance or 0.001
+      return math.abs(partSize.X - targetSize.X) <= tolerance and
+             math.abs(partSize.Y - targetSize.Y) <= tolerance and
+             math.abs(partSize.Z - targetSize.Z) <= tolerance
+  end
+
+  local function matchesCriteria(part)
+      for _, criteria in ipairs(criteriaList) do
+          if part:IsA("BasePart") and part.Name == criteria.partName and isMatchingSize(part.Size, criteria.partSize) then
+              return true
+          end
+      end
+      return false
+  end
+
+  -- === Straightener support (inherits B mode). We apply yaw-level / inverted / vertical to the closest vehicle pivot.
+  local function GetClosestVehicle()
+    local origin = Camera.CFrame.Position
+    local char = WS:FindFirstChild("Const")
+        and WS.Const:FindFirstChild("Ignore")
+        and WS.Const.Ignore:FindFirstChild("LocalCharacter")
+    if char and char:FindFirstChild("Middle") then origin = char.Middle.Position end
+
+    local VehicleIdentifiers = {
+      { "Seat", "Plastics" },
+      { "lights2", "lights3" },
+    }
+
+    local closest, minDist = nil, math.huge
+    for _, model in ipairs(WS:GetChildren()) do
+      if not model:IsA("Model") then continue end
+      for _, ids in ipairs(VehicleIdentifiers) do
+        local ok = true
+        for _, n in ipairs(ids) do if not model:FindFirstChild(n) then ok=false break end end
+        if ok then
+          local ref = model:FindFirstChild(ids[1])
+          if ref and ref:IsA("BasePart") then
+            local d = (ref.Position - origin).Magnitude
+            if d < minDist then closest, minDist = model, d end
+          end
+          break
+        end
+      end
+    end
+    if closest and not closest.PrimaryPart then
+      closest.PrimaryPart = closest:FindFirstChild("Seat")
+        or closest:FindFirstChild("lights2")
+        or closest:FindFirstChildOfClass("Part")
+        or closest:FindFirstChildOfClass("MeshPart")
+    end
+    return closest
+  end
+
+  local function YawOnlyCFrame(pos, look)
+    local flat = Vector3.new(look.X, 0, look.Z)
+    if flat.Magnitude < 1e-3 then flat = Vector3.new(0,0,-1) else flat = flat.Unit end
+    return CFrame.lookAt(pos, pos + flat, Vector3.yAxis)
+  end
+
+  local function BuildCFrameForMode(pos)
+    if Control.modeIndex == 2 then
+      local cf = CFrame.lookAt(pos, pos + Vector3.new(0, -1, 0), Vector3.zAxis)
+      return cf * CFrame.Angles(math.rad(-10), 0, math.rad(180))
+    elseif Control.modeIndex == 3 then
+      local cf = CFrame.lookAt(pos, pos + Vector3.new(0, 1, 0), Vector3.zAxis)
+      return cf * CFrame.Angles(math.rad(-10), 0, 0)
+    end
+    return nil -- mode 1 handled as yaw-level blend
+  end
+
+  -- === Fly control (exact logic you provided)
+  local function controlFly(targetPart, flySpeed)
+      local flyVector = Vector3.zero
+      local rotateCFrame = CFrame.new()
+
+      if not userInput:GetFocusedTextBox() then
+          if userInput:IsKeyDown(Enum.KeyCode.W) then
+              flyVector += currentCamera.CFrame.LookVector * flySpeed
+          end
+          if userInput:IsKeyDown(Enum.KeyCode.A) then
+              flyVector -= currentCamera.CFrame.RightVector * flySpeed
+          end
+          if userInput:IsKeyDown(Enum.KeyCode.S) then
+              flyVector -= currentCamera.CFrame.LookVector * flySpeed
+          end
+          if userInput:IsKeyDown(Enum.KeyCode.D) then
+              flyVector += currentCamera.CFrame.RightVector * flySpeed
+          end
+          if userInput:IsKeyDown(Enum.KeyCode.R) then
+              rotateCFrame *= CFrame.Angles(0, -rotateSpeed, 0)
+          end
+          if userInput:IsKeyDown(Enum.KeyCode.Q) then
+              rotateCFrame *= CFrame.Angles(0,  rotateSpeed, 0)
+          end
+
+          targetPart.CFrame *= rotateCFrame
+      else
+          targetPart.Velocity = Vector3.zero
+          targetPart.RotVelocity = Vector3.zero
+      end
+
+      targetPart.Velocity = flyVector
+  end
+
+  -- === Mode activator (kept semantically identical to your toggler)
+  local function toggleCarMode(modeName)
+      local mode = CarModes[modeName]
+      local togglingOff = mode.Active
+
+      -- Deactivate all
+      for _, m in pairs(CarModes) do m.Active = false end
+      for _, conn in ipairs(connections) do conn:Disconnect() end
+      connections = {}
+
+      -- If re-pressing same key, disable
+      if togglingOff then return end
+
+      -- Activate
+      mode.Active = true
+      currentSpeed = mode.Speed
+
+      for _, obj in ipairs(flyObjects) do
+          if obj:IsA("BasePart") then obj.Anchored = false end
+          local conn = runService.Heartbeat:Connect(function()
+              -- 1) Apply your fly control to each matched part
+              controlFly(obj, currentSpeed)
+          end)
+          table.insert(connections, conn)
+      end
+  end
+
+  -- === Orientation (straightener) pass — respects Control.modeIndex (B key)
+  local orientConn
+  local function startOrientationLoop()
+    if orientConn then orientConn:Disconnect() end
+    orientConn = RS.Heartbeat:Connect(function()
+      if not active then return end
+      local vehicle = GetClosestVehicle()
+      if not vehicle or not vehicle.PrimaryPart then return end
+      local pivot = vehicle:GetPivot()
+      if Control.modeIndex == 1 then
+        -- Yaw-Level blend (straightener)
+        local flat = YawOnlyCFrame(pivot.Position, pivot.LookVector)
+        vehicle:PivotTo(pivot:Lerp(flat, 0.35))
+      else
+        local target = BuildCFrameForMode(pivot.Position)
+        if target then vehicle:PivotTo(pivot:Lerp(target, 0.3)) end
+      end
+    end)
+  end
+
+  -- === Continuous enforcement of NoCollide on wheels/hub (like you had)
+  local function setNoCollideIfWheel(part)
+    if not part:IsA("BasePart") then return end
+    local name = part.Name
+    if name == "BLWheel" or name == "BRWheel" or name == "FLWheel" or name == "FRWheel" or name == "BLWheelHub" then
+      if part.CanCollide then part.CanCollide = false end
+    end
+  end
+
+  workspace.DescendantAdded:Connect(function(d)
+      if matchesCriteria(d) then
+          table.insert(flyObjects, d)
+          if d:IsA("BasePart") then setNoCollideIfWheel(d) end
+      end
+  end)
+  workspace.DescendantRemoving:Connect(function(d)
+      for i, obj in ipairs(flyObjects) do if obj == d then table.remove(flyObjects, i) break end end
+  end)
+  for _, d in ipairs(workspace:GetDescendants()) do
+      if matchesCriteria(d) then
+          table.insert(flyObjects, d)
+          if d:IsA("BasePart") then setNoCollideIfWheel(d) end
+      end
+  end
+  runService.Heartbeat:Connect(function()
+      for _, obj in ipairs(flyObjects) do setNoCollideIfWheel(obj) end
+  end)
+
+  -- === Public lifecycle
+  local function Start()
+    if active then return end
+    active = true
+    startOrientationLoop()
+    print("[CarModes] ON • Mode="..Control.modeNames[Control.modeIndex])
+  end
+  local function Stop()
+    if not active then return end
+    active = false
+    for _, c in ipairs(connections) do c:Disconnect() end
+    connections = {}
+    if orientConn then orientConn:Disconnect() orientConn=nil end
+    print("[CarModes] OFF")
+  end
+
+  -- === Hotkey bridge (called by controller when Z/F/H pressed)
+  local function Hotkey(keyCode)
+    for name, data in pairs(CarModes) do
+      if data.Key == keyCode then
+        toggleCarMode(name)
+        break
+      end
+    end
+  end
+
+  return { Start = Start, Stop = Stop, Hotkey = Hotkey }
+end
+
+-- Register into controller
+getgenv().Payload0Control.systems["CarModes"] = CarModeSystem()
