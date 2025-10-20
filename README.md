@@ -50,7 +50,6 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/UnloadWeapons(H)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/2026/Bhop%2BDowncliff',
 	'https://raw.githubusercontent.com/1337kat/V5/main/StealLoot(V)',
-	'https://raw.githubusercontent.com/1337kat/V5/main/SafeRide(N)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/Longneck(L)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/JetpackMod(i)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/Freecam(K)',
