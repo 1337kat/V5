@@ -1,0 +1,461 @@
+--// Uphill-only terrain adaptation, smooth ground effect
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local Workspace = game:GetService('Workspace')
+local UserInputService = game:GetService('UserInputService')
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local cloneref = cloneref or function(x)
+    return x
+end
+local UIS = cloneref(UserInputService)
+local RS = cloneref(RunService)
+local WS = cloneref(Workspace)
+if not LPH_JIT_MAX then
+    LPH_JIT_MAX = function(...)
+        return ...
+    end
+end
+
+--// ===== Core Hub
+local cheat = { connections = { renderstepped = {} } }
+RS.RenderStepped:Connect(function(dt)
+    for _, f in pairs(cheat.connections.renderstepped) do
+        f(dt)
+    end
+end)
+
+cheat.utility = {}
+function cheat.utility.new_renderstepped(f)
+    cheat.connections.renderstepped[f] = f
+    return {
+        Disconnect = function()
+            cheat.connections.renderstepped[f] = nil
+        end,
+    }
+end
+
+--// =====================================================================
+--//  MODULE
+--// =====================================================================
+local function Payload0_EliteHover()
+    local flyConn, car, middle
+    local active = true
+    local currentVelocity = Vector3.zero
+    local lastSpeedRatio = 0
+    local verticalInertia = 0
+    local lastLook = Camera.CFrame.LookVector
+    local lastYawRight = 0
+
+    -- ===== CONFIG
+    local C = {
+        speed = 360,
+        upspeed = 15,
+        descendKey = Enum.KeyCode.LeftShift,
+        descendSpeed = 640,
+        smoothStopRate = 6.5,
+        horizontalAccel = 14,
+        maxPitch = math.rad(60),
+
+        minHeightAboveTerrain = 5,
+        groundEffectRange = 10,
+        groundEffectGain = 0.08,
+
+        -- Modified: Advanced terrain prediction parameters
+        raycastSpread = math.rad(30), -- Angular spread for fan of raycasts
+        raycastCount = 5, -- Number of raycasts in the fan
+        nearPredict = 20, -- Reduced for tighter control
+        farPredict = 60, -- Reduced for tighter control
+        terrainResponseBoost = 5.0, -- Increased for sharper response
+        terrainResponseSmooth = 0.6, -- Adjusted for smoother blending
+        climbSlopeScale = 0.6, -- Adjusted for more responsive climbs
+
+        verticalResponsiveness = 12,
+        gravityBias = 0.12,
+
+        bankMaxAngle = math.rad(10),
+        bankSmoothing = 10,
+    }
+
+    local VehicleIdentifiers = {
+        { 'Seat', 'Plastics' },
+        { 'lights2', 'lights3' },
+-- Helicopter max speed: 34
+    }
+
+    -- ===== Helpers
+    local function getMiddle()
+        local ok, r = pcall(function()
+            return WS:WaitForChild('Const', 2)
+                :WaitForChild('Ignore', 2)
+                :WaitForChild('LocalCharacter', 2)
+                :WaitForChild('Middle', 2)
+        end)
+        return ok and r or nil
+    end
+
+    local function resetState()
+        currentVelocity = Vector3.zero
+        verticalInertia = 0
+        lastSpeedRatio = 0
+        car, middle = nil, nil
+    end
+
+    local function findNearestCar()
+        car = nil
+        local closest = math.huge
+        local origin = (middle and middle.Position) or Camera.CFrame.Position
+        for _, m in pairs(WS:GetChildren()) do
+            if m:IsA('Model') then
+                for _, group in ipairs(VehicleIdentifiers) do
+                    local ok = true
+                    for _, name in ipairs(group) do
+                        if not m:FindFirstChild(name) then
+                            ok = false
+                            break
+                        end
+                    end
+                    if ok then
+                        local ref = m:FindFirstChild(group[1])
+                        if ref and ref:IsA('BasePart') then
+                            local d = (ref.Position - origin).Magnitude
+                            if d < closest then
+                                closest = d
+                                car = m
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        if car and not car.PrimaryPart then
+            car.PrimaryPart = car:FindFirstChild('Seat')
+                or car:FindFirstChild('lights2')
+                or car:FindFirstChildOfClass('Part')
+                or car:FindFirstChildOfClass('MeshPart')
+        end
+    end
+
+    local function setAnchoredAll(model, anchored)
+        for _, p in ipairs(model:GetDescendants()) do
+            if p:IsA('BasePart') then
+                p.Anchored = anchored
+            end
+        end
+    end
+
+    -- ===== Terrain raycast with normal filtering
+    local function terrainYAt(posYProbe)
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Whitelist
+        params.FilterDescendantsInstances = { WS.Terrain }
+        params.IgnoreWater = true
+
+        local res = WS:Raycast(
+            posYProbe + Vector3.new(0, 150, 0),
+            Vector3.new(0, -400, 0),
+            params
+        )
+        if not res then
+            return nil
+        end
+
+        local normal = res.Normal
+        if normal.Y < 0.45 then
+            return nil
+        end
+
+        local viewDir = Camera.CFrame.LookVector
+        local dot = math.clamp(viewDir:Dot(normal), -1, 1)
+        local angle = math.deg(math.acos(dot))
+        if angle < 40 then
+            return nil
+        end
+
+        return res.Position.Y
+    end
+
+    -- ===== New: Advanced Terrain Prediction
+    local function getTerrainProfile(pos, look, right)
+        local profile = { heights = {}, maxHeight = nil, slopeFactor = 0 }
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Whitelist
+        params.FilterDescendantsInstances = { WS.Terrain }
+        params.IgnoreWater = true
+
+        -- Fan of raycasts: center, left, right, near, far
+        local angles = {}
+        for i = 1, C.raycastCount do
+            local t = (i - 1) / (C.raycastCount - 1) - 0.5
+            angles[i] = t * C.raycastSpread
+        end
+
+        local validHeights = {}
+        for i, angle in ipairs(angles) do
+            -- Rotate raycast direction around up axis
+            local dir = CFrame.Angles(0, angle, 0) * look
+            local nearPos = pos + dir * C.nearPredict
+            local farPos = pos + dir * C.farPredict
+
+            -- Near raycast
+            local nearRes = WS:Raycast(nearPos + Vector3.new(0, 150, 0), Vector3.new(0, -400, 0), params)
+            if nearRes and nearRes.Normal.Y >= 0.45 then
+                local weight = 1 - math.abs(angle) / C.raycastSpread -- Higher weight for center rays
+                table.insert(validHeights, { y = nearRes.Position.Y, weight = weight * 0.6 })
+            end
+
+            -- Far raycast
+            local farRes = WS:Raycast(farPos + Vector3.new(0, 150, 0), Vector3.new(0, -400, 0), params)
+            if farRes and farRes.Normal.Y >= 0.45 then
+                local weight = 1 - math.abs(angle) / C.raycastSpread
+                table.insert(validHeights, { y = farRes.Position.Y, weight = weight * 0.4 })
+            end
+        end
+
+        -- Weighted average of valid heights
+        local totalWeight = 0
+        local weightedHeight = 0
+        for _, h in ipairs(validHeights) do
+            weightedHeight = weightedHeight + h.y * h.weight
+            totalWeight = totalWeight + h.weight
+        end
+        if totalWeight > 0 then
+            profile.maxHeight = weightedHeight / totalWeight
+        end
+
+        -- Slope estimation
+        local centerFar = terrainYAt(pos + look * C.farPredict)
+        if centerFar and totalWeight > 0 then
+            profile.slopeFactor = math.clamp((centerFar - pos.Y) / C.farPredict, 0, 2)
+        end
+
+        return profile
+    end
+
+    -- ===== Minimal HUD
+    local gui
+    local function buildHUD()
+        local PlayerGui = LocalPlayer:WaitForChild('PlayerGui')
+        gui = Instance.new('ScreenGui')
+        gui.Name = 'Payload0_EliteHover_HUD'
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.Parent = PlayerGui
+
+        local txt = Instance.new('TextLabel')
+        txt.Size = UDim2.new(0, 230, 0, 20)
+        txt.Position = UDim2.new(0, 10, 0, 10)
+        txt.BackgroundTransparency = 1
+        txt.TextColor3 = Color3.fromRGB(170, 200, 255)
+        txt.TextSize = 12
+        txt.Font = Enum.Font.Code
+        txt.TextXAlignment = Enum.TextXAlignment.Left
+        txt.Text = 'Y = Toggle • Shift = Descend'
+        txt.Parent = gui
+    end
+    local function destroyHUD()
+        if gui then
+            gui:Destroy()
+            gui = nil
+        end
+    end
+
+    -- ===== Main Loop
+    local function flyStep(dt)
+        if not active then
+            return
+        end
+        middle = middle or getMiddle()
+        if not middle then
+            return
+        end
+
+        if
+            not car
+            or (car:GetPrimaryPartCFrame().Position - middle.Position).Magnitude
+                > 60
+        then
+            findNearestCar()
+            return
+        end
+
+        local pp = car.PrimaryPart
+        if not pp then
+            return
+        end
+        setAnchoredAll(car, true)
+
+        local camCF = Camera.CFrame
+        local look = camCF.LookVector
+        local dir = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then
+            dir += look
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then
+            dir -= look
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then
+            dir += camCF.RightVector
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then
+            dir -= camCF.RightVector
+        end
+
+        local pitch = math.asin(math.clamp(look.Y, -1, 1))
+        local verticalVel = math.clamp(pitch / C.maxPitch, -1, 1) * C.upspeed
+        if UIS:IsKeyDown(C.descendKey) then
+            verticalVel = -C.descendSpeed
+        end
+
+        local targetVelocity =
+            Vector3.new(dir.X * C.speed, verticalVel, dir.Z * C.speed)
+        local lerpRate = (
+            dir.Magnitude > 0 and C.horizontalAccel or C.smoothStopRate
+        )
+        currentVelocity = currentVelocity:Lerp(
+            targetVelocity,
+            math.clamp(dt * lerpRate, 0, 1)
+        )
+
+        local curCF = car:GetPrimaryPartCFrame()
+        local pos = curCF.Position
+        local newPos = pos + currentVelocity * dt
+
+        local terrainY_now = terrainYAt(pos)
+        if terrainY_now then
+            local minY = terrainY_now + C.minHeightAboveTerrain
+            if newPos.Y < minY then
+                newPos = Vector3.new(newPos.X, minY, newPos.Z)
+                verticalInertia = math.min(verticalInertia, 0)
+            end
+        end
+
+        -- =========================================================
+        --  ADVANCED TERRAIN-AWARE UPHILL-ONLY CLIMB
+        -- =========================================================
+        local horizSpeed =
+            Vector3.new(currentVelocity.X, 0, currentVelocity.Z).Magnitude
+        local speedRatio = math.clamp(horizSpeed / C.speed, 0, 1)
+        lastSpeedRatio = lastSpeedRatio
+            + (speedRatio - lastSpeedRatio) * math.clamp(dt * 6, 0, 1)
+
+        -- New: Use terrain profile from multiple raycasts
+        local terrainProfile = getTerrainProfile(pos, look, curCF.RightVector)
+        local blendY = terrainProfile.maxHeight
+        local slopeFactor = terrainProfile.slopeFactor
+
+        if blendY and blendY > pos.Y and lastSpeedRatio > 0.05 then
+            local terrainDelta = blendY - pos.Y
+            local targetClearance = C.minHeightAboveTerrain + 1.0
+            local heightError = math.clamp(
+                (terrainDelta - targetClearance) / targetClearance,
+                0,
+                1
+            )
+
+            local climb = terrainDelta
+                * dt
+                * C.terrainResponseBoost
+                * (lastSpeedRatio ^ C.terrainResponseSmooth)
+                * (1.0 + slopeFactor * C.climbSlopeScale)
+                * heightError
+
+            verticalInertia += climb * C.verticalResponsiveness
+            local vLimit = math.max(6, horizSpeed * 8)
+            verticalInertia = math.clamp(verticalInertia, 0, vLimit)
+        end
+
+        -- =========================================================
+        local grav = WS.Gravity or 196.2
+        verticalInertia = verticalInertia + (grav * C.gravityBias * dt * 0.001)
+
+        if terrainY_now then
+            local height = newPos.Y - terrainY_now
+            if height < C.groundEffectRange then
+                local nearness =
+                    math.clamp(1 - (height / C.groundEffectRange), 0, 1)
+                verticalInertia += nearness * C.groundEffectGain
+            end
+        end
+
+        newPos += Vector3.new(0, verticalInertia * dt, 0)
+        verticalInertia *= (1 - math.clamp(dt * 2.0, 0, 0.2))
+
+        local right = curCF.RightVector
+        local turnRate = (right:Dot((look - lastLook) / math.max(dt, 1e-4)))
+        lastLook = look
+        lastYawRight = lastYawRight
+            + (turnRate - lastYawRight)
+                * math.clamp(dt * C.bankSmoothing, 0, 1)
+        local bankAngle = math.clamp(-lastYawRight, -1, 1) * C.bankMaxAngle
+
+        local forward = (newPos + look) - newPos
+        local up = Vector3.new(0, 1, 0)
+        local base = CFrame.lookAt(newPos, newPos + forward, up)
+        local banked = base * CFrame.Angles(0, 0, bankAngle)
+
+        car:SetPrimaryPartCFrame(banked)
+    end
+
+    local function startup()
+        active = true
+        resetState()
+        middle = getMiddle()
+        findNearestCar()
+        if not flyConn then
+            flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+        end
+        buildHUD()
+        print('[Payload0 EliteHover v5.0] INIT • Advanced Terrain Prediction Active')
+    end
+
+    local function shutdown()
+        active = false
+        if flyConn then
+            flyConn:Disconnect()
+            flyConn = nil
+        end
+        if car and car.PrimaryPart then
+            setAnchoredAll(car, false)
+            for _, p in ipairs(car:GetDescendants()) do
+                if p:IsA('BasePart') then
+                    p.AssemblyLinearVelocity = Vector3.zero
+                    p.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+        end
+        destroyHUD()
+        print('[Payload0 EliteHover v5.0] SHUTDOWN COMPLETE.')
+    end
+
+    return {
+        Start = startup,
+        Stop = shutdown,
+        IsActive = function()
+            return active
+        end,
+    }
+end
+
+--// =====================================================================
+--//  CONTROLLER (Y = Toggle / Reboot-Safe)
+--// =====================================================================
+do
+    local Module = Payload0_EliteHover()
+    UIS.InputBegan:Connect(function(input, gpe)
+        if gpe then
+            return
+        end
+        if input.KeyCode == Enum.KeyCode.Y then
+            if Module.IsActive() then
+                Module.Stop()
+            else
+                Module = Payload0_EliteHover()
+                Module.Start()
+            end
+        end
+    end)
+    Module.Start()
+end
