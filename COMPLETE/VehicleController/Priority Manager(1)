@@ -1,0 +1,149 @@
+--// ================================================================
+--//  PAYLOAD0 • MAIN CONTROLLER (Priority + Hotkeys)
+--//  Rules:
+--//   • Start state: ALL OFF
+--//   • Y = EliteHover (Main King Priority)
+--//   • Z/F/H = CarModes (Secondary priority). Enters with current straightener mode
+--//   • B = Cycle straightener mode (no priority switch)
+--//   • T = Toggle vehicle collision on closest vehicle (no priority switch)
+--// ================================================================
+
+local Players            = game:GetService("Players")
+local RunService         = game:GetService("RunService")
+local Workspace          = game:GetService("Workspace")
+local UserInputService   = game:GetService("UserInputService")
+local Camera             = Workspace.CurrentCamera
+local LocalPlayer        = Players.LocalPlayer
+
+local cloneref = cloneref or function(x) return x end
+local UIS      = cloneref(UserInputService)
+local RS       = cloneref(RunService)
+local WS       = cloneref(Workspace)
+if not LPH_JIT_MAX then LPH_JIT_MAX = function(...) return ... end end
+
+-- Shared registry the other sections attach to:
+getgenv().Payload0Control = {
+  active       = nil,        -- "EliteHover" | "CarModes" | nil
+  systems      = {},         -- name -> { Start=fn, Stop=fn, Hotkey=fn? }
+  modeIndex    = 1,          -- 1=Yaw-Level (default), 2=180 Inverted, 3=Vertical
+  modeNames    = { "Straightener (Yaw-Level)", "Straightened 180 (Inverted)", "Straightened (Vertical)" },
+  collisionOn  = true,
+}
+
+-- Utility: find closest eligible vehicle model (used by T utility toggle)
+local VehicleIdentifiers = {
+  { "Seat", "Plastics" },
+  { "lights2", "lights3" },
+}
+local function GetClosestVehicle()
+  local char = WS:FindFirstChild("Const")
+      and WS.Const:FindFirstChild("Ignore")
+      and WS.Const.Ignore:FindFirstChild("LocalCharacter")
+  local origin
+  if char and char:FindFirstChild("Middle") then
+    origin = char.Middle.Position
+  else
+    origin = Camera.CFrame.Position
+  end
+
+  local closest, minDist = nil, math.huge
+  for _, model in ipairs(WS:GetChildren()) do
+    if model:IsA("Model") then
+      for _, ids in ipairs(VehicleIdentifiers) do
+        local ok = true
+        for _, n in ipairs(ids) do
+          if not model:FindFirstChild(n) then ok = false break end
+        end
+        if ok then
+          local ref = model:FindFirstChild(ids[1])
+          if ref and ref:IsA("BasePart") then
+            local d = (ref.Position - origin).Magnitude
+            if d < minDist then
+              closest, minDist = model, d
+            end
+          end
+          break
+        end
+      end
+    end
+  end
+  if closest and not closest.PrimaryPart then
+    closest.PrimaryPart = closest:FindFirstChild("Seat")
+      or closest:FindFirstChild("lights2")
+      or closest:FindFirstChildOfClass("Part")
+      or closest:FindFirstChildOfClass("MeshPart")
+  end
+  return closest
+end
+
+-- Priority switcher
+function Payload0Control.Activate(name)
+  if Payload0Control.active == name then return end
+  -- stop current
+  if Payload0Control.active and Payload0Control.systems[Payload0Control.active] then
+    local s = Payload0Control.systems[Payload0Control.active]
+    if s.Stop then s.Stop() end
+  end
+  -- start new
+  Payload0Control.active = name
+  if name and Payload0Control.systems[name] and Payload0Control.systems[name].Start then
+    Payload0Control.systems[name].Start()
+  end
+  print(("[Priority] → %s"):format(name or "None"))
+end
+
+-- Collision utility (no priority change)
+local function ToggleCollisionOnClosestVehicle()
+  local vehicle = GetClosestVehicle()
+  if not vehicle then
+    print("[Collision] No vehicle found.")
+    return
+  end
+  Payload0Control.collisionOn = not Payload0Control.collisionOn
+  for _, p in ipairs(vehicle:GetDescendants()) do
+    if p:IsA("BasePart") then
+      p.CanCollide = Payload0Control.collisionOn
+    end
+  end
+  print(Payload0Control.collisionOn and "[Collision: ON]" or "[Collision: OFF]")
+end
+
+-- Global hotkeys (wires to systems but follows the rules above)
+UIS.InputBegan:Connect(function(input, gpe)
+  if gpe then return end
+
+  -- King priority
+  if input.KeyCode == Enum.KeyCode.Y then
+    if Payload0Control.active == "EliteHover" then
+      Payload0Control.Activate(nil) -- turn off everything
+    else
+      Payload0Control.Activate("EliteHover")
+    end
+    return
+  end
+
+  -- Secondary priorities (CarModes). These must always be able to take control from EliteHover.
+  if input.KeyCode == Enum.KeyCode.Z or input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.H then
+    -- Switch to CarModes priority
+    if Payload0Control.active ~= "CarModes" then
+      Payload0Control.Activate("CarModes")
+    end
+    -- forward hotkey to CarModes (to select the specific speed preset)
+    local sys = Payload0Control.systems["CarModes"]
+    if sys and sys.Hotkey then sys.Hotkey(input.KeyCode) end
+    return
+  end
+
+  -- Utilities (never change priority)
+  if input.KeyCode == Enum.KeyCode.B then
+    Payload0Control.modeIndex = Payload0Control.modeIndex + 1
+    if Payload0Control.modeIndex > 3 then Payload0Control.modeIndex = 1 end
+    print("[Straightener] → ".. Payload0Control.modeNames[Payload0Control.modeIndex])
+    return
+  elseif input.KeyCode == Enum.KeyCode.T then
+    ToggleCollisionOnClosestVehicle()
+    return
+  end
+end)
+
+print("[Payload0 Controller] Ready • All systems OFF • Mode=Yaw-Level • Collision=ON")
