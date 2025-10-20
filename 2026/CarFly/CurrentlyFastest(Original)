@@ -1,0 +1,235 @@
+-- ==============================================================
+--  PAYLOAD0 VEHICLE FLIGHT SYSTEM (FULL CF MODE • TRUE ON/OFF REBOOT)
+--  Build: 10/19/25
+--  • Starts ON automatically in FULL CF (CFrame anchoring)
+--  • U = Toggle → FULL SHUTDOWN ↔ FULL REBOOT (fresh startup state)
+--  • LeftShift = Descend
+--  • OFF = total shutdown (no loops, no anchoring, no ownership)
+-- ==============================================================
+
+--// Services
+local Players = game:GetService("Players")
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local RunService = cloneref(game:GetService("RunService"))
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+--// Fallback
+if not LPH_JIT_MAX then LPH_JIT_MAX = function(...) return ... end end
+
+--// Core loop hub
+local cheat = { connections = { renderstepped = {} } }
+RunService.RenderStepped:Connect(function(dt)
+	for _, f in pairs(cheat.connections.renderstepped) do
+		f(dt)
+	end
+end)
+
+cheat.utility = {}
+cheat.utility.new_renderstepped = function(f)
+	cheat.connections.renderstepped[f] = f
+	return { Disconnect = function() cheat.connections.renderstepped[f] = nil end }
+end
+
+-- ==============================================================
+--  PAYLOAD0 CF FLIGHT MODULE
+-- ==============================================================
+local function Payload0_CF_Module()
+	local flyConn, car, middle
+	local active = true
+	local currentVelocity = Vector3.zero
+
+	-- Config
+	local speed, upspeed = 360, 15
+	local smoothStopRate = 6.5
+	local minHeightAboveTerrain = 5
+	local smoothY = 8
+	local maxPitch = math.rad(60)
+	local descendKey = Enum.KeyCode.LeftShift
+	local descendSpeed = 640
+
+	local VehicleIdentifiers = {
+		{"Seat","Plastics"},
+		{"lights2","lights3"},
+	}
+
+	--------------------------------------------------------------
+	local function getMiddle()
+		local ok, r = pcall(function()
+			return Workspace:WaitForChild("Const",2)
+				:WaitForChild("Ignore",2)
+				:WaitForChild("LocalCharacter",2)
+				:WaitForChild("Middle",2)
+		end)
+		return ok and r or nil
+	end
+
+	local function resetState()
+		currentVelocity = Vector3.zero
+		car, middle = nil, nil
+	end
+
+	local function findNearestCar()
+		car = nil
+		local closest = math.huge
+		local origin = (middle and middle.Position) or Camera.CFrame.Position
+		for _, m in pairs(Workspace:GetChildren()) do
+			if m:IsA("Model") then
+				for _, group in ipairs(VehicleIdentifiers) do
+					local ok = true
+					for _, name in ipairs(group) do
+						if not m:FindFirstChild(name) then ok=false; break end
+					end
+					if ok then
+						local ref = m:FindFirstChild(group[1])
+						if ref and ref:IsA("BasePart") then
+							local d = (ref.Position - origin).Magnitude
+							if d < closest then closest = d; car = m end
+						end
+						break
+					end
+				end
+			end
+		end
+		if car and not car.PrimaryPart then
+			car.PrimaryPart = car:FindFirstChild("Seat")
+				or car:FindFirstChild("lights2")
+				or car:FindFirstChildOfClass("Part")
+				or car:FindFirstChildOfClass("MeshPart")
+		end
+	end
+
+	local function getTerrainHeight(pos)
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Blacklist
+		if car then params.FilterDescendantsInstances = {car} end
+		params.IgnoreWater = true
+		local res = Workspace:Raycast(pos + Vector3.new(0,50,0), Vector3.new(0,-100,0), params)
+		return res and res.Position.Y or nil
+	end
+
+	--------------------------------------------------------------
+	--  CF FLIGHT LOOP
+	--------------------------------------------------------------
+	local function flyStep(dt)
+		if not active then return end
+		middle = middle or getMiddle(); if not middle then return end
+		if not car or (car:GetPrimaryPartCFrame().Position - middle.Position).Magnitude > 60 then
+			findNearestCar(); return
+		end
+
+		local pp = car.PrimaryPart; if not pp then return end
+		setAnchoredAll(car, true)
+
+		local camCF = Camera.CFrame
+		local look = camCF.LookVector
+		local dir = Vector3.zero
+
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += camCF.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= camCF.RightVector end
+
+		local pitch = math.asin(math.clamp(look.Y, -1, 1))
+		local verticalVel = math.clamp(pitch / maxPitch, -1, 1) * upspeed
+		if UserInputService:IsKeyDown(descendKey) then verticalVel = -descendSpeed end
+
+		local targetVelocity = Vector3.new(dir.X * speed, verticalVel, dir.Z * speed)
+		local lerpRate = (dir.Magnitude > 0 and 14 or smoothStopRate)
+		currentVelocity = currentVelocity:Lerp(targetVelocity, math.clamp(dt * lerpRate, 0, 1))
+
+		local curCF = car:GetPrimaryPartCFrame()
+		local newPos = curCF.Position + currentVelocity * dt
+
+		if not UserInputService:IsKeyDown(descendKey) then
+			local terrainY = getTerrainHeight(curCF.Position)
+			if terrainY then
+				local minY = terrainY + minHeightAboveTerrain
+				if newPos.Y < minY then
+					newPos = Vector3.new(
+						newPos.X,
+						curCF.Position.Y + (minY - curCF.Position.Y) * math.clamp(dt * smoothY, 0, 1),
+						newPos.Z
+					)
+				end
+			end
+		end
+
+		car:SetPrimaryPartCFrame(CFrame.new(newPos, newPos + look))
+	end
+
+	--------------------------------------------------------------
+	--  Anchoring helpers
+	--------------------------------------------------------------
+	function setAnchoredAll(model, anchored)
+		for _, part in pairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Anchored = anchored
+			end
+		end
+	end
+
+	--------------------------------------------------------------
+	--  STARTUP
+	--------------------------------------------------------------
+	local function startup()
+		active = true
+		resetState()
+		middle = getMiddle()
+		findNearestCar()
+		if not flyConn then
+			flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+		end
+		print("[Fly][CF] FULL POWER INITIATED.")
+	end
+
+	--------------------------------------------------------------
+	--  SHUTDOWN
+	--------------------------------------------------------------
+	local function shutdown()
+		active = false
+		if flyConn then flyConn:Disconnect() flyConn = nil end
+		if car and car.PrimaryPart then
+			setAnchoredAll(car, false)
+			for _, p in ipairs(car:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.AssemblyLinearVelocity = Vector3.zero
+					p.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+		end
+		print("[Fly][CF] SYSTEM SHUTDOWN COMPLETE.")
+	end
+
+	--------------------------------------------------------------
+	--  PUBLIC API
+	--------------------------------------------------------------
+	return {
+		Start = startup,
+		Stop = shutdown,
+		IsActive = function() return active end
+	}
+end
+
+-- ==============================================================
+--  CONTROLLER (U = TRUE REBOOT TOGGLE)
+-- ==============================================================
+do
+	local Module = Payload0_CF_Module()
+
+	UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then return end
+		if input.KeyCode == Enum.KeyCode.Y then
+			if Module.IsActive() then
+				Module.Stop()
+			else
+				Module = Payload0_CF_Module() -- rebuilds from scratch
+				Module.Start()
+			end
+		end
+	end)
+
+	-- Auto-start
+	Module.Start()
+end
