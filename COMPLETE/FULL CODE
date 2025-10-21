@@ -5,7 +5,7 @@
 --//  HOTKEYS
 --//    • Y          → EliteHover (Main / King Priority)   [T locked]
 --//    • Z / F / H  → CarModes (Secondary Priority)
---//    • B          → Cycle Straightener (EliteHover + F-mode only)
+--//    • J          → Cycle Straightener (EliteHover + F-mode only)
 --//    • Ctrl+Z/H   → Temporary Straightener while Ctrl held
 --//    • Q / R      → Yaw rotate (CarMode only, per frame, ±1°)
 --//    • T          → Collision toggle (disabled during EliteHover)
@@ -13,7 +13,7 @@
 --//  STRAIGHTENER RULES
 --//    • Applies by default only in F-mode (and in EliteHover when desired)
 --//    • Z/H never use straightener unless Ctrl is held (temporary)
---//    • B key cycles straightener only for EliteHover or F-mode
+--//    • J key cycles straightener only for EliteHover or F-mode
 --//
 --//  COLLISION RULES
 --//    • EliteHover forces collision ON on activation; T is disabled
@@ -162,7 +162,7 @@ UIS.InputBegan:Connect(function(input, gpe)
     end
 
     -- Utilities
-    if input.KeyCode == Enum.KeyCode.B then
+    if input.KeyCode == Enum.KeyCode.J then
         -- Straightener cycling allowed only in EliteHover OR F-mode within CarModes
         if Payload0Control.active == "CarModes"
             and Payload0Control.currentCarMode ~= Enum.KeyCode.F then
