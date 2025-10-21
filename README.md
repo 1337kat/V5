@@ -5,6 +5,13 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 
 # 2026 Release
 ```lua
+--// ================================================================
+--//  SILENT LOADSTRING EXECUTOR • INDEXED FAIL DETECTOR (MASKED HINTS)
+--//  • Automatically counts 1..n
+--//  • Shows partial name hints only
+--//  • Never reveals authors or full URLs
+--// ================================================================
+
 -- ✅ Central __namecall Hook Manager (must be first!)
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
@@ -32,16 +39,18 @@ end
 
 setreadonly(mt, true)
 
--- ✅ Smart executor-aware one-time script runner
+-- ✅ One-time session guard
 if shared.allScriptsExecutedOnce then
-    warn("🚫 All scripts have already been executed this session. Aborting.")
+    warn("🚫 All scripts have already been executed this session.")
     return
 end
 
--- First-time init
-shared.executedURLs = shared.executedURLs or {}
-shared.failedURLs = {}
+shared.executedScripts = shared.executedScripts or {}
+shared.failedScripts = {}
 
+-- ================================================================
+--  CONFIGURATION
+-- ================================================================
 local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/AmongusHook',
 	'https://raw.githubusercontent.com/1337kat/V5/main/CleanBackpack(%22%5D%22)',
@@ -63,44 +72,54 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/FULL%20CODE'
 }
 
--- Optional: encode () to avoid rawgit parsing issues
-local function encodeURL(url)
-    return url:gsub("[(]", "%%28"):gsub("[)]", "%%29")
-end
-
--- Execution logic
-for _, rawUrl in ipairs(scripts) do
-    local url = encodeURL(rawUrl)
-
-    if not shared.executedURLs[url] then
-        local success, result = pcall(function()
-            return loadstring(game:HttpGet(url, true))()
-        end)
-
-        if success then
-            shared.executedURLs[url] = true
-            print("✅ Executed:", url)
-        else
-            table.insert(shared.failedURLs, url)
-            warn("❌ Failed to load:", url, "\nError:", result)
-        end
+-- Masking function: shows only last 8 characters (excluding extension)
+local function maskedName(url)
+    local name = url:match("([^/]+)$") or "Unknown"
+    name = name:gsub("%.lua", "") -- remove file extension
+    if #name > 8 then
+        return "***" .. name:sub(-8)
     else
-        print("⏭️ Skipping already executed:", url)
+        return "***" .. name
     end
 end
 
--- End marker: prevent any re-run at all in future
-shared.allScriptsExecutedOnce = true
+-- ================================================================
+--  EXECUTION LOOP
+-- ================================================================
+for i, rawUrl in ipairs(scripts) do
+    local hint = maskedName(rawUrl)
 
--- Optional delay to log failures after everything else
-task.delay(3, function()
-    if #shared.failedURLs > 0 then
-        warn("=== ❌ Failed URLs ===")
-        for _, url in ipairs(shared.failedURLs) do
-            warn(url)
+    if not shared.executedScripts[i] then
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(rawUrl, true))()
+        end)
+
+        if success then
+            shared.executedScripts[i] = true
+            print(string.format("✅ #%d %s executed successfully.", i, hint))
+        else
+            table.insert(shared.failedScripts, {index = i, hint = hint})
+            warn(string.format("❌ #%d %s failed to execute.", i, hint))
         end
     else
-        print("✅ All scripts executed successfully.")
+        print(string.format("⏭️ #%d %s already executed this session.", i, hint))
+    end
+end
+
+shared.allScriptsExecutedOnce = true
+
+-- ================================================================
+--  POST-RUN SUMMARY
+-- ================================================================
+task.delay(3, function()
+    if #shared.failedScripts > 0 then
+        warn("=== ❌ FAILED SCRIPTS SUMMARY ===")
+        for _, item in ipairs(shared.failedScripts) do
+            warn(string.format("• #%d %s failed", item.index, item.hint))
+        end
+        warn(string.format("=== %d / %d failed ===", #shared.failedScripts, #scripts))
+    else
+        print(string.format("✅ All %d scripts executed successfully.", #scripts))
     end
 end)
 ```
