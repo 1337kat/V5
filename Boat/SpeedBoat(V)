@@ -1,5 +1,6 @@
 --// =============================================================
---//  BOATFLY • CONSTANT VELOCITY (SELF-ORIENTED + SMOOTH STEERING)
+--//  MUST BE IN CLOSE PROXIMITY TO TOGGLE!!!!
+--//  BOATFLY • CONSTANT VELOCITY (PROXIMITY-AWARE + CLOSEST HULL)
 --//  A/D SWAPPED • TEXT-VISIBILITY AS MASTER • HARD STOP ON HIDE
 --//  SPEED = 420 (FAST VERSION)
 --// =============================================================
@@ -29,7 +30,8 @@ end
 -- ===== CONFIG =====
 local CFG = {
     Speed               = 420,                    -- constant travel speed (boosted)
-    ReacquireDist       = 60,
+    ReacquireDist       = 60,                     -- reacquire or stop when far
+    ActivationDist      = 10,                     -- ✅ must be this close to toggle
     UseYawUpright       = true,
     TurnRate            = math.rad(2.6),          -- smooth yaw rotation
     PreferLVWhenSeated  = true,
@@ -44,9 +46,7 @@ local BoatIdentifiers = { {"Hull","Metal"} }
 
 -- ===== HELPERS =====
 local function setVisible(v)
-    if boatflyText then
-        boatflyText.Visible = v
-    end
+    if boatflyText then boatflyText.Visible = v end
 end
 
 local function getLV()
@@ -64,10 +64,12 @@ local function stopMotion()
         end)
     end
     if hull then
-        hull.AssemblyLinearVelocity = Vector3.zero
-        hull.Velocity = Vector3.zero
-        hull.AssemblyAngularVelocity = Vector3.zero
-        hull.RotVelocity = Vector3.zero
+        pcall(function()
+            hull.AssemblyLinearVelocity = Vector3.zero
+            hull.Velocity = Vector3.zero
+            hull.AssemblyAngularVelocity = Vector3.zero
+            hull.RotVelocity = Vector3.zero
+        end)
     end
 end
 
@@ -101,7 +103,7 @@ local function findNearestBoat(origin: Vector3)
             end
         end
     end
-    return best
+    return best, bestDist
 end
 
 local function ensurePrimaryPart(m)
@@ -127,6 +129,18 @@ UserInputService.InputBegan:Connect(function(io,gpe)
     if io.KeyCode then
         input[io.KeyCode] = true
         if io.KeyCode == Enum.KeyCode.V then
+            middle = middle or getMiddle()
+            local origin = (middle and middle.Position) or Camera.CFrame.Position
+            local nearest, dist = findNearestBoat(origin)
+            local hullPart = nearest and nearest:FindFirstChild("Hull")
+
+            -- ✅ guard: only allow toggle if very close to nearest Hull
+            if not (hullPart and dist <= CFG.ActivationDist) then
+                return -- ignore key press completely
+            end
+
+            boatModel, hull = nearest, hullPart
+            ensurePrimaryPart(boatModel)
             isFlying = not isFlying
             setVisible(isFlying)
             warn("BoatFly: "..(isFlying and "ENABLED" or "DISABLED"))
@@ -151,16 +165,17 @@ RunService.RenderStepped:Connect(function(dt)
     middle = middle or getMiddle()
     local origin = (middle and middle.Position) or Camera.CFrame.Position
 
-    if (not boatModel) or (not hull) or ((hull.Position - origin).Magnitude > CFG.ReacquireDist) then
-        boatModel = findNearestBoat(origin)
-        hull = boatModel and boatModel:FindFirstChild("Hull")
-        if not (hull and hull:IsA("BasePart")) then
-            hull = nil
-            stopMotion()
-            return
-        end
-        ensurePrimaryPart(boatModel)
+    -- reacquire only the closest Hull boat
+    local nearest, dist = findNearestBoat(origin)
+    if (not nearest) or (not hull) or (dist > CFG.ReacquireDist) then
+        isFlying = false
+        setVisible(false)
+        stopMotion()
+        return
     end
+    boatModel = nearest
+    hull = boatModel:FindFirstChild("Hull")
+    ensurePrimaryPart(boatModel)
 
     pcall(function()
         if boatModel.PrimaryPart then boatModel.PrimaryPart:SetNetworkOwner(LocalPlayer) end
@@ -225,6 +240,14 @@ end)
 -- ===== OPTIONAL API =====
 getgenv().BoatFly = {
     Toggle = function()
+        middle = middle or getMiddle()
+        local origin = (middle and middle.Position) or Camera.CFrame.Position
+        local nearest, dist = findNearestBoat(origin)
+        local hullPart = nearest and nearest:FindFirstChild("Hull")
+        if not (hullPart and dist <= CFG.ActivationDist) then return end
+
+        boatModel, hull = nearest, hullPart
+        ensurePrimaryPart(boatModel)
         isFlying = not isFlying
         setVisible(isFlying)
         warn("BoatFly: "..(isFlying and "ENABLED" or "DISABLED"))
@@ -238,4 +261,4 @@ getgenv().BoatFly = {
     end
 }
 
-print("[BoatFly Constant Velocity • Text-Master • Hard Stop] loaded with speed 420.")
+print("[BoatFly Constant Velocity • Proximity Guard • Closest Hull] loaded with speed 420.")
