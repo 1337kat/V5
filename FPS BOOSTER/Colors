@@ -1,0 +1,94 @@
+--// ============================================================
+--//  ANTI-LAG / FPS BOOST SCRIPT (Standalone)
+--//  Skips any parts colored with protected colors
+--// ============================================================
+
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Terrain = workspace:FindFirstChildWhichIsA("Terrain")
+
+-- Define protected colors (your “do not touch” list)
+local PROTECTED_COLORS = {
+	Color3.fromRGB(248, 248, 248), -- light gray
+	Color3.fromRGB(117, 99, 86),   -- brownish tone
+	-- Add more here if needed
+}
+
+-- Terrain optimization
+if Terrain then
+	Terrain.WaterWaveSize = 0
+	Terrain.WaterWaveSpeed = 0
+	Terrain.WaterReflectance = 0
+	Terrain.WaterTransparency = 1
+end
+
+-- Lighting optimization
+Lighting.GlobalShadows = false
+Lighting.FogEnd = 9e9
+Lighting.FogStart = 9e9
+settings().Rendering.QualityLevel = 1
+
+-- Check if a part color matches any protected color
+local function isProtectedColor(partColor)
+	for _, protected in ipairs(PROTECTED_COLORS) do
+		if partColor == protected then
+			return true
+		end
+	end
+	return false
+end
+
+-- Determine whether a part should be skipped
+local function shouldSkip(part)
+	if part:IsA("BasePart") and isProtectedColor(part.Color) then
+		return true
+	end
+	return false
+end
+
+-- Optimize parts safely
+local function optimize(v)
+	if v:IsA("BasePart") then
+		if shouldSkip(v) then return end
+		v.CastShadow = false
+		v.Material = Enum.Material.Plastic
+		v.Reflectance = 0
+		pcall(function()
+			v.BackSurface = "SmoothNoOutlines"
+			v.BottomSurface = "SmoothNoOutlines"
+			v.FrontSurface = "SmoothNoOutlines"
+			v.LeftSurface = "SmoothNoOutlines"
+			v.RightSurface = "SmoothNoOutlines"
+			v.TopSurface = "SmoothNoOutlines"
+		end)
+	elseif v:IsA("Decal") then
+		v.Transparency = 1
+		v.Texture = ""
+	elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+		v.Lifetime = NumberRange.new(0)
+	end
+end
+
+-- Apply to all existing instances
+for _, v in pairs(game:GetDescendants()) do
+	optimize(v)
+end
+
+-- Disable all post effects (Bloom, ColorCorrection, SunRays, etc.)
+for _, v in pairs(Lighting:GetDescendants()) do
+	if v:IsA("PostEffect") then
+		v.Enabled = false
+	end
+end
+
+-- Optimize new parts added later
+workspace.DescendantAdded:Connect(function(child)
+	task.spawn(function()
+		if child:IsA("ForceField") or child:IsA("Sparkles") or child:IsA("Smoke") or child:IsA("Fire") or child:IsA("Beam") then
+			RunService.Heartbeat:Wait()
+			child:Destroy()
+			return
+		end
+		optimize(child)
+	end)
+end)
