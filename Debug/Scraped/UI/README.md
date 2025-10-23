@@ -16,7 +16,7 @@ Handles all on-screen interfaces, map rendering, HUD logic, and player input.
 - Class modules: `NetClient`, `SendCodes`, `InputManager`, `Sound`, `FPS`
 
 ## 🧱 Architecture Overview
-
+```text
 ClientUIController
 │
 ├── Core HUD
@@ -41,7 +41,7 @@ ClientUIController
 └── Prompts & Inputs
     ├── Text Prompts
     └── TCP Input Submissions
-
+```
 
     # 🎮 ClientUIController.lua
 **Unified Front-End Controller for Game Interfaces and Systems**
