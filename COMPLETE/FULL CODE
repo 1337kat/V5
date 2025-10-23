@@ -258,7 +258,7 @@ do
         local lastYawRight = 0
 
         local C = {
-            speed = 380, -- Original 340
+            speed = 358, -- Original 340
             upspeed = 15,
             descendKey = Enum.KeyCode.LeftShift,
             descendSpeed = 300,
