@@ -43,7 +43,7 @@ ClientUIController
     └── TCP Input Submissions
 ```
 
-    # 🎮 ClientUIController.lua
+# 🎮 ClientUIController.lua
 **Unified Front-End Controller for Game Interfaces and Systems**
 
 This module is the **central client-side controller** responsible for managing every major aspect of the in-game interface — from the FPS HUD and radial menus to map rendering, input prompts, and UI state transitions.  
