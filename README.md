@@ -69,6 +69,7 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/ChunkRemoval(R)',
     'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)',
+	'https://raw.githubusercontent.com/1337kat/V5/main/FPS%20BOOSTER/Colors',
 	'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/FULL%20CODE'
 }
 
