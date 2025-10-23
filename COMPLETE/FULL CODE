@@ -23,48 +23,60 @@
 ---------------------------
 -- Services / Fallbacks  --
 ---------------------------
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
-local Workspace        = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
-local Camera           = Workspace.CurrentCamera
-local LocalPlayer      = Players.LocalPlayer
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local Workspace = game:GetService('Workspace')
+local UserInputService = game:GetService('UserInputService')
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
-local cloneref = cloneref or function(x) return x end
-local UIS      = cloneref(UserInputService)
-local RS       = cloneref(RunService)
-local WS       = cloneref(Workspace)
+local cloneref = cloneref or function(x)
+    return x
+end
+local UIS = cloneref(UserInputService)
+local RS = cloneref(RunService)
+local WS = cloneref(Workspace)
 
 if not LPH_JIT_MAX then
-    LPH_JIT_MAX = function(...) return ... end
+    LPH_JIT_MAX = function(...)
+        return ...
+    end
 end
 
 -----------------------------
 -- Shared Control Registry --
 -----------------------------
 getgenv().Payload0Control = {
-    active          = nil,   -- "EliteHover" | "CarModes" | nil
-    systems         = {},    -- name -> { Start=fn, Stop=fn, Hotkey=fn? }
-    modeIndex       = 1,     -- 1=Yaw-Level, 2=180 Inverted, 3=Vertical
-    modeNames       = { "Straightener (Yaw-Level)", "Straightened 180 (Inverted)", "Straightened (Vertical)" },
-    collisionOn     = true,
-    currentCarMode  = nil,   -- Enum.KeyCode of last CarMode key (Z/F/H)
+    active = nil, -- "EliteHover" | "CarModes" | nil
+    systems = {}, -- name -> { Start=fn, Stop=fn, Hotkey=fn? }
+    modeIndex = 1, -- 1=Yaw-Level, 2=180 Inverted, 3=Vertical
+    modeNames = {
+        'Straightener (Yaw-Level)',
+        'Straightened 180 (Inverted)',
+        'Straightened (Vertical)',
+    },
+    collisionOn = true,
+    currentCarMode = nil, -- Enum.KeyCode of last CarMode key (Z/F/H)
 }
 
 ---------------------------------
 -- Vehicle Identification Utils --
 ---------------------------------
 local VehicleIdentifiers = {
-    { "Seat",    "Plastics" },
-    { "lights2", "lights3"  },
+    { 'Seat', 'Plastics' },
+    { 'lights2', 'lights3' },
 }
 
 local function GetClosestVehicle()
     local origin
-    local const = WS:FindFirstChild("Const")
-    if const and const:FindFirstChild("Ignore") and const.Ignore:FindFirstChild("LocalCharacter") then
+    local const = WS:FindFirstChild('Const')
+    if
+        const
+        and const:FindFirstChild('Ignore')
+        and const.Ignore:FindFirstChild('LocalCharacter')
+    then
         local lc = const.Ignore.LocalCharacter
-        if lc:FindFirstChild("Middle") then
+        if lc:FindFirstChild('Middle') then
             origin = lc.Middle.Position
         end
     end
@@ -72,15 +84,18 @@ local function GetClosestVehicle()
 
     local closest, minDist = nil, math.huge
     for _, model in ipairs(WS:GetChildren()) do
-        if model:IsA("Model") then
+        if model:IsA('Model') then
             for _, ids in ipairs(VehicleIdentifiers) do
                 local ok = true
                 for _, n in ipairs(ids) do
-                    if not model:FindFirstChild(n) then ok = false break end
+                    if not model:FindFirstChild(n) then
+                        ok = false
+                        break
+                    end
                 end
                 if ok then
                     local ref = model:FindFirstChild(ids[1])
-                    if ref and ref:IsA("BasePart") then
+                    if ref and ref:IsA('BasePart') then
                         local d = (ref.Position - origin).Magnitude
                         if d < minDist then
                             closest, minDist = model, d
@@ -92,18 +107,20 @@ local function GetClosestVehicle()
         end
     end
     if closest and not closest.PrimaryPart then
-        closest.PrimaryPart = closest:FindFirstChild("Seat")
-            or closest:FindFirstChild("lights2")
-            or closest:FindFirstChildOfClass("Part")
-            or closest:FindFirstChildOfClass("MeshPart")
+        closest.PrimaryPart = closest:FindFirstChild('Seat')
+            or closest:FindFirstChild('lights2')
+            or closest:FindFirstChildOfClass('Part')
+            or closest:FindFirstChildOfClass('MeshPart')
     end
     return closest
 end
 
 local function ForceCollision(vehicle, state)
-    if not vehicle then return end
+    if not vehicle then
+        return
+    end
     for _, p in ipairs(vehicle:GetDescendants()) do
-        if p:IsA("BasePart") then
+        if p:IsA('BasePart') then
             p.CanCollide = state
         end
     end
@@ -111,7 +128,9 @@ end
 
 local function ToggleCollisionOnClosestVehicle()
     local vehicle = GetClosestVehicle()
-    if not vehicle then return end
+    if not vehicle then
+        return
+    end
     Payload0Control.collisionOn = not Payload0Control.collisionOn
     ForceCollision(vehicle, Payload0Control.collisionOn)
 end
@@ -120,13 +139,23 @@ end
 -- Priority Manager --
 ----------------------
 function Payload0Control.Activate(name)
-    if Payload0Control.active == name then return end
+    if Payload0Control.active == name then
+        return
+    end
     local current = Payload0Control.active
-    if current and Payload0Control.systems[current] and Payload0Control.systems[current].Stop then
+    if
+        current
+        and Payload0Control.systems[current]
+        and Payload0Control.systems[current].Stop
+    then
         Payload0Control.systems[current].Stop()
     end
     Payload0Control.active = name
-    if name and Payload0Control.systems[name] and Payload0Control.systems[name].Start then
+    if
+        name
+        and Payload0Control.systems[name]
+        and Payload0Control.systems[name].Start
+    then
         Payload0Control.systems[name].Start()
     end
 end
@@ -135,48 +164,60 @@ end
 -- Global Keys --
 -----------------
 UIS.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
+    if gpe then
+        return
+    end
 
     -- EliteHover (King priority)
     if input.KeyCode == Enum.KeyCode.Y then
-        if Payload0Control.active == "EliteHover" then
+        if Payload0Control.active == 'EliteHover' then
             Payload0Control.Activate(nil)
         else
-            Payload0Control.Activate("EliteHover")
+            Payload0Control.Activate('EliteHover')
         end
         return
     end
 
     -- CarModes (Secondary priority)
-    if input.KeyCode == Enum.KeyCode.Z
+    if
+        input.KeyCode == Enum.KeyCode.Z
         or input.KeyCode == Enum.KeyCode.F
-        or input.KeyCode == Enum.KeyCode.H then
-
+        or input.KeyCode == Enum.KeyCode.H
+    then
         Payload0Control.currentCarMode = input.KeyCode
-        if Payload0Control.active ~= "CarModes" then
-            Payload0Control.Activate("CarModes")
+        if Payload0Control.active ~= 'CarModes' then
+            Payload0Control.Activate('CarModes')
         end
-        local sys = Payload0Control.systems["CarModes"]
-        if sys and sys.Hotkey then sys.Hotkey(input.KeyCode) end
+        local sys = Payload0Control.systems['CarModes']
+        if sys and sys.Hotkey then
+            sys.Hotkey(input.KeyCode)
+        end
         return
     end
 
     -- Utilities
     if input.KeyCode == Enum.KeyCode.J then
         -- Straightener cycling allowed only in EliteHover OR F-mode within CarModes
-        if Payload0Control.active == "CarModes"
-            and Payload0Control.currentCarMode ~= Enum.KeyCode.F then
+        if
+            Payload0Control.active == 'CarModes'
+            and Payload0Control.currentCarMode ~= Enum.KeyCode.F
+        then
             return
         end
-        if Payload0Control.active ~= "EliteHover" and Payload0Control.active ~= "CarModes" then
+        if
+            Payload0Control.active ~= 'EliteHover'
+            and Payload0Control.active ~= 'CarModes'
+        then
             return
         end
         Payload0Control.modeIndex = Payload0Control.modeIndex + 1
-        if Payload0Control.modeIndex > 3 then Payload0Control.modeIndex = 1 end
+        if Payload0Control.modeIndex > 3 then
+            Payload0Control.modeIndex = 1
+        end
         return
     elseif input.KeyCode == Enum.KeyCode.T then
         -- T locked during EliteHover
-        if Payload0Control.active == "EliteHover" then
+        if Payload0Control.active == 'EliteHover' then
             return
         end
         ToggleCollisionOnClosestVehicle()
@@ -193,57 +234,63 @@ do
     -- RenderStepped micro-hub (deterministic, silent)
     local cheat = { connections = { renderstepped = {} } }
     RunService.RenderStepped:Connect(function(dt)
-        for _, f in pairs(cheat.connections.renderstepped) do f(dt) end
+        for _, f in pairs(cheat.connections.renderstepped) do
+            f(dt)
+        end
     end)
     cheat.utility = {}
     function cheat.utility.new_renderstepped(f)
         cheat.connections.renderstepped[f] = f
-        return { Disconnect = function() cheat.connections.renderstepped[f] = nil end }
+        return {
+            Disconnect = function()
+                cheat.connections.renderstepped[f] = nil
+            end,
+        }
     end
 
     local function Payload0_EliteHover()
         local flyConn, car, middle
         local active = false
         local currentVelocity = Vector3.zero
-        local lastSpeedRatio   = 0
-        local verticalInertia  = 0
-        local lastLook         = Camera.CFrame.LookVector
-        local lastYawRight     = 0
+        local lastSpeedRatio = 0
+        local verticalInertia = 0
+        local lastLook = Camera.CFrame.LookVector
+        local lastYawRight = 0
 
         local C = {
-            speed                 = 360,
-            upspeed               = 15,
-            descendKey            = Enum.KeyCode.LeftShift,
-            descendSpeed          = 640,
-            smoothStopRate        = 6.5,
-            horizontalAccel       = 14,
-            maxPitch              = math.rad(60),
+            speed = 340,
+            upspeed = 15,
+            descendKey = Enum.KeyCode.LeftShift,
+            descendSpeed = 300,
+            smoothStopRate = 6.5,
+            horizontalAccel = 14,
+            maxPitch = math.rad(60),
 
             minHeightAboveTerrain = 5,
-            groundEffectRange     = 10,
-            groundEffectGain      = 0.08,
+            groundEffectRange = 10,
+            groundEffectGain = 0.08,
 
-            raycastSpread         = math.rad(30),
-            raycastCount          = 5,
-            nearPredict           = 20,
-            farPredict            = 60,
-            terrainResponseBoost  = 5.0,
+            raycastSpread = math.rad(30),
+            raycastCount = 5,
+            nearPredict = 20,
+            farPredict = 60,
+            terrainResponseBoost = 5.0,
             terrainResponseSmooth = 0.6,
-            climbSlopeScale       = 0.6,
+            climbSlopeScale = 0.6,
 
-            verticalResponsiveness= 12,
-            gravityBias           = 0.12,
+            verticalResponsiveness = 12,
+            gravityBias = 0.12,
 
-            bankMaxAngle          = math.rad(10),
-            bankSmoothing         = 10,
+            bankMaxAngle = math.rad(10),
+            bankSmoothing = 10,
         }
 
         local function getMiddle()
             local ok, r = pcall(function()
-                return WS:WaitForChild("Const", 2)
-                         :WaitForChild("Ignore", 2)
-                         :WaitForChild("LocalCharacter", 2)
-                         :WaitForChild("Middle", 2)
+                return WS:WaitForChild('Const', 2)
+                    :WaitForChild('Ignore', 2)
+                    :WaitForChild('LocalCharacter', 2)
+                    :WaitForChild('Middle', 2)
             end)
             return ok and r or nil
         end
@@ -251,8 +298,8 @@ do
         local function resetState()
             currentVelocity = Vector3.zero
             verticalInertia = 0
-            lastSpeedRatio  = 0
-            car, middle     = nil, nil
+            lastSpeedRatio = 0
+            car, middle = nil, nil
         end
 
         local function findNearestCar()
@@ -265,8 +312,14 @@ do
             params.FilterDescendantsInstances = { WS.Terrain }
             params.IgnoreWater = true
 
-            local res = WS:Raycast(pos + Vector3.new(0, 150, 0), Vector3.new(0, -400, 0), params)
-            if not res or res.Normal.Y < 0.45 then return nil end
+            local res = WS:Raycast(
+                pos + Vector3.new(0, 150, 0),
+                Vector3.new(0, -400, 0),
+                params
+            )
+            if not res or res.Normal.Y < 0.45 then
+                return nil
+            end
             return res.Position.Y
         end
 
@@ -287,20 +340,30 @@ do
             for _, a in ipairs(angles) do
                 local dir = CFrame.Angles(0, a, 0) * look
                 local nearPos = pos + dir * C.nearPredict
-                local farPos  = pos + dir * C.farPredict
+                local farPos = pos + dir * C.farPredict
 
-                local nearRes = WS:Raycast(nearPos + Vector3.new(0,150,0), Vector3.new(0,-400,0), params)
+                local nearRes = WS:Raycast(
+                    nearPos + Vector3.new(0, 150, 0),
+                    Vector3.new(0, -400, 0),
+                    params
+                )
                 if nearRes and nearRes.Normal.Y >= 0.45 then
                     local w = 1 - math.abs(a) / C.raycastSpread
-                    weightedHeight = weightedHeight + nearRes.Position.Y * (w * 0.6)
-                    totalWeight    = totalWeight + (w * 0.6)
+                    weightedHeight = weightedHeight
+                        + nearRes.Position.Y * (w * 0.6)
+                    totalWeight = totalWeight + (w * 0.6)
                 end
 
-                local farRes = WS:Raycast(farPos + Vector3.new(0,150,0), Vector3.new(0,-400,0), params)
+                local farRes = WS:Raycast(
+                    farPos + Vector3.new(0, 150, 0),
+                    Vector3.new(0, -400, 0),
+                    params
+                )
                 if farRes and farRes.Normal.Y >= 0.45 then
                     local w = 1 - math.abs(a) / C.raycastSpread
-                    weightedHeight = weightedHeight + farRes.Position.Y * (w * 0.4)
-                    totalWeight    = totalWeight + (w * 0.4)
+                    weightedHeight = weightedHeight
+                        + farRes.Position.Y * (w * 0.4)
+                    totalWeight = totalWeight + (w * 0.4)
                 end
             end
 
@@ -310,7 +373,8 @@ do
 
             local centerFar = terrainYAt(pos + look * C.farPredict)
             if centerFar and totalWeight > 0 then
-                profile.slopeFactor = math.clamp((centerFar - pos.Y) / C.farPredict, 0, 2)
+                profile.slopeFactor =
+                    math.clamp((centerFar - pos.Y) / C.farPredict, 0, 2)
             end
 
             return profile
@@ -318,98 +382,139 @@ do
 
         -- (Silent HUD removed by default)
         local function flyStep(dt)
-            if not active then return end
+            if not active then
+                return
+            end
             middle = middle or getMiddle()
-            if not middle then return end
+            if not middle then
+                return
+            end
 
             if not car or not car.PrimaryPart then
                 findNearestCar()
-                if not car or not car.PrimaryPart then return end
+                if not car or not car.PrimaryPart then
+                    return
+                end
             end
 
             -- Anchor during hover to ensure crisp kinematics and safety
             for _, p in ipairs(car:GetDescendants()) do
-                if p:IsA("BasePart") then p.Anchored = true end
+                if p:IsA('BasePart') then
+                    p.Anchored = true
+                end
             end
 
             local camCF = Camera.CFrame
-            local look  = camCF.LookVector
-            local dir   = Vector3.zero
+            local look = camCF.LookVector
+            local dir = Vector3.zero
 
-            if UIS:IsKeyDown(Enum.KeyCode.W) then dir += look end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= look end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then dir += camCF.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= camCF.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.W) then
+                dir += look
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then
+                dir -= look
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then
+                dir += camCF.RightVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then
+                dir -= camCF.RightVector
+            end
 
-            local pitch       = math.asin(math.clamp(look.Y, -1, 1))
-            local verticalVel = math.clamp(pitch / C.maxPitch, -1, 1) * C.upspeed
-            if UIS:IsKeyDown(C.descendKey) then verticalVel = -C.descendSpeed end
+            local pitch = math.asin(math.clamp(look.Y, -1, 1))
+            local verticalVel = math.clamp(pitch / C.maxPitch, -1, 1)
+                * C.upspeed
+            if UIS:IsKeyDown(C.descendKey) then
+                verticalVel = -C.descendSpeed
+            end
 
-            local targetVelocity = Vector3.new(dir.X * C.speed, verticalVel, dir.Z * C.speed)
-            local lerpRate       = (dir.Magnitude > 0 and C.horizontalAccel or C.smoothStopRate)
-            currentVelocity      = currentVelocity:Lerp(targetVelocity, math.clamp(dt * lerpRate, 0, 1))
+            local targetVelocity =
+                Vector3.new(dir.X * C.speed, verticalVel, dir.Z * C.speed)
+            local lerpRate = (
+                dir.Magnitude > 0 and C.horizontalAccel or C.smoothStopRate
+            )
+            currentVelocity = currentVelocity:Lerp(
+                targetVelocity,
+                math.clamp(dt * lerpRate, 0, 1)
+            )
 
-            local curCF  = car:GetPrimaryPartCFrame()
-            local pos    = curCF.Position
+            local curCF = car:GetPrimaryPartCFrame()
+            local pos = curCF.Position
             local newPos = pos + currentVelocity * dt
 
             local terrainY_now = terrainYAt(pos)
             if terrainY_now then
                 local minY = terrainY_now + C.minHeightAboveTerrain
                 if newPos.Y < minY then
-                    newPos          = Vector3.new(newPos.X, minY, newPos.Z)
+                    newPos = Vector3.new(newPos.X, minY, newPos.Z)
                     verticalInertia = math.min(verticalInertia, 0)
                 end
             end
 
             -- Advanced uphill-only climb blending
-            local horizSpeed = Vector3.new(currentVelocity.X, 0, currentVelocity.Z).Magnitude
+            local horizSpeed =
+                Vector3.new(currentVelocity.X, 0, currentVelocity.Z).Magnitude
             local speedRatio = math.clamp(horizSpeed / C.speed, 0, 1)
-            lastSpeedRatio   = lastSpeedRatio + (speedRatio - lastSpeedRatio) * math.clamp(dt * 6, 0, 1)
+            lastSpeedRatio = lastSpeedRatio
+                + (speedRatio - lastSpeedRatio) * math.clamp(dt * 6, 0, 1)
 
-            local terrainProfile = getTerrainProfile(pos, look, curCF.RightVector)
-            local blendY         = terrainProfile.maxHeight
-            local slopeFactor    = terrainProfile.slopeFactor
+            local terrainProfile =
+                getTerrainProfile(pos, look, curCF.RightVector)
+            local blendY = terrainProfile.maxHeight
+            local slopeFactor = terrainProfile.slopeFactor
 
             if blendY and blendY > pos.Y and lastSpeedRatio > 0.05 then
-                local terrainDelta     = blendY - pos.Y
-                local targetClearance  = C.minHeightAboveTerrain + 1.0
-                local heightError      = math.clamp((terrainDelta - targetClearance) / targetClearance, 0, 1)
-                local climb = terrainDelta * dt * C.terrainResponseBoost
-                                * (lastSpeedRatio ^ C.terrainResponseSmooth)
-                                * (1.0 + slopeFactor * C.climbSlopeScale)
-                                * heightError
+                local terrainDelta = blendY - pos.Y
+                local targetClearance = C.minHeightAboveTerrain + 1.0
+                local heightError = math.clamp(
+                    (terrainDelta - targetClearance) / targetClearance,
+                    0,
+                    1
+                )
+                local climb = terrainDelta
+                    * dt
+                    * C.terrainResponseBoost
+                    * (lastSpeedRatio ^ C.terrainResponseSmooth)
+                    * (1.0 + slopeFactor * C.climbSlopeScale)
+                    * heightError
 
-                verticalInertia = verticalInertia + climb * C.verticalResponsiveness
-                local vLimit    = math.max(6, horizSpeed * 8)
+                verticalInertia = verticalInertia
+                    + climb * C.verticalResponsiveness
+                local vLimit = math.max(6, horizSpeed * 8)
                 verticalInertia = math.clamp(verticalInertia, 0, vLimit)
             end
 
             -- Gravity bias + ground effect
             local grav = WS.Gravity or 196.2
-            verticalInertia = verticalInertia + (grav * C.gravityBias * dt * 0.001)
+            verticalInertia = verticalInertia
+                + (grav * C.gravityBias * dt * 0.001)
 
             if terrainY_now then
                 local height = newPos.Y - terrainY_now
                 if height < C.groundEffectRange then
-                    local nearness = math.clamp(1 - (height / C.groundEffectRange), 0, 1)
-                    verticalInertia = verticalInertia + nearness * C.groundEffectGain
+                    local nearness =
+                        math.clamp(1 - (height / C.groundEffectRange), 0, 1)
+                    verticalInertia = verticalInertia
+                        + nearness * C.groundEffectGain
                 end
             end
 
-            newPos          = newPos + Vector3.new(0, verticalInertia * dt, 0)
-            verticalInertia = verticalInertia * (1 - math.clamp(dt * 2.0, 0, 0.2))
+            newPos = newPos + Vector3.new(0, verticalInertia * dt, 0)
+            verticalInertia = verticalInertia
+                * (1 - math.clamp(dt * 2.0, 0, 0.2))
 
             -- Subtle banking from camera turn rate
-            local right     = curCF.RightVector
-            local turnRate  = (right:Dot((look - lastLook) / math.max(dt, 1e-4)))
-            lastLook        = look
-            lastYawRight    = lastYawRight + (turnRate - lastYawRight) * math.clamp(dt * C.bankSmoothing, 0, 1)
+            local right = curCF.RightVector
+            local turnRate = (right:Dot((look - lastLook) / math.max(dt, 1e-4)))
+            lastLook = look
+            lastYawRight = lastYawRight
+                + (turnRate - lastYawRight)
+                    * math.clamp(dt * C.bankSmoothing, 0, 1)
             local bankAngle = math.clamp(-lastYawRight, -1, 1) * C.bankMaxAngle
 
             local forward = (newPos + look) - newPos
-            local base    = CFrame.lookAt(newPos, newPos + forward, Vector3.yAxis)
-            local banked  = base * CFrame.Angles(0, 0, bankAngle)
+            local base = CFrame.lookAt(newPos, newPos + forward, Vector3.yAxis)
+            local banked = base * CFrame.Angles(0, 0, bankAngle)
 
             car:SetPrimaryPartCFrame(banked)
         end
@@ -432,10 +537,13 @@ do
 
         local function Stop()
             active = false
-            if flyConn then flyConn:Disconnect() flyConn = nil end
+            if flyConn then
+                flyConn:Disconnect()
+                flyConn = nil
+            end
             if car and car.PrimaryPart then
                 for _, p in ipairs(car:GetDescendants()) do
-                    if p:IsA("BasePart") then
+                    if p:IsA('BasePart') then
                         p.Anchored = false
                         p.AssemblyLinearVelocity = Vector3.zero
                         p.AssemblyAngularVelocity = Vector3.zero
@@ -447,7 +555,7 @@ do
         return { Start = Start, Stop = Stop }
     end
 
-    Payload0Control.systems["EliteHover"] = Payload0_EliteHover()
+    Payload0Control.systems['EliteHover'] = Payload0_EliteHover()
 end
 
 --// ====================================================================
@@ -461,18 +569,18 @@ do
     local Camera = Workspace.CurrentCamera
 
     local function CarModeSystem()
-        local active       = false
-        local connections  = {}
-        local orientConn   = nil
+        local active = false
+        local connections = {}
+        local orientConn = nil
         local currentSpeed = 0
-        local flyObjects   = {}
-        local rotateSpeed  = math.rad(1) -- Q/R per-frame yaw rate
+        local flyObjects = {}
+        local rotateSpeed = math.rad(1) -- Q/R per-frame yaw rate
 
         -- CarMode setup
         local CarModeConfig = {
-            { Name = "CarMode1", Key = Enum.KeyCode.Z, Speed = 60  },
-            { Name = "CarMode2", Key = Enum.KeyCode.F, Speed = 15  },
-            { Name = "CarMode3", Key = Enum.KeyCode.H, Speed = 300 },
+            { Name = 'CarMode1', Key = Enum.KeyCode.Z, Speed = 60 },
+            { Name = 'CarMode2', Key = Enum.KeyCode.F, Speed = 15 },
+            { Name = 'CarMode3', Key = Enum.KeyCode.H, Speed = 300 },
         }
 
         local CarModes = {}
@@ -482,15 +590,74 @@ do
 
         -- Detection criteria
         local criteriaList = {
-            { partName = "BLWheelHub", partSize = Vector3.new(0.25, 0.25, 0.25) },
-            { partName = "lights1",    partSize = Vector3.new(3.0251893997192383, 0.6689038276672363, 5.577791213989258) },
-            { partName = "lights3",    partSize = Vector3.new(0.42277026176452637, 0.6625227928161621, 0.07328414916992188) },
-            { partName = "lights2",    partSize = Vector3.new(0.42277026176452637, 0.6625227928161621, 0.07328414916992188) },
-            { partName = "FRWheel",    partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628) },
-            { partName = "FLWheel",    partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628) },
-            { partName = "Body",       partSize = Vector3.new(6.795680046081543, 5.078634262084961, 13.125102996826172) },
-            { partName = "BRWheel",    partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628) },
-            { partName = "BLWheel",    partSize = Vector3.new(2.4000000953674316, 2.4000000953674316, 0.7129999995231628) },
+            {
+                partName = 'BLWheelHub',
+                partSize = Vector3.new(0.25, 0.25, 0.25),
+            },
+            {
+                partName = 'lights1',
+                partSize = Vector3.new(
+                    3.0251893997192383,
+                    0.6689038276672363,
+                    5.577791213989258
+                ),
+            },
+            {
+                partName = 'lights3',
+                partSize = Vector3.new(
+                    0.42277026176452637,
+                    0.6625227928161621,
+                    0.07328414916992188
+                ),
+            },
+            {
+                partName = 'lights2',
+                partSize = Vector3.new(
+                    0.42277026176452637,
+                    0.6625227928161621,
+                    0.07328414916992188
+                ),
+            },
+            {
+                partName = 'FRWheel',
+                partSize = Vector3.new(
+                    2.4000000953674316,
+                    2.4000000953674316,
+                    0.7129999995231628
+                ),
+            },
+            {
+                partName = 'FLWheel',
+                partSize = Vector3.new(
+                    2.4000000953674316,
+                    2.4000000953674316,
+                    0.7129999995231628
+                ),
+            },
+            {
+                partName = 'Body',
+                partSize = Vector3.new(
+                    6.795680046081543,
+                    5.078634262084961,
+                    13.125102996826172
+                ),
+            },
+            {
+                partName = 'BRWheel',
+                partSize = Vector3.new(
+                    2.4000000953674316,
+                    2.4000000953674316,
+                    0.7129999995231628
+                ),
+            },
+            {
+                partName = 'BLWheel',
+                partSize = Vector3.new(
+                    2.4000000953674316,
+                    2.4000000953674316,
+                    0.7129999995231628
+                ),
+            },
         }
 
         local function isMatchingSize(a, b, t)
@@ -501,9 +668,14 @@ do
         end
 
         local function matchesCriteria(part)
-            if not part:IsA("BasePart") then return false end
+            if not part:IsA('BasePart') then
+                return false
+            end
             for _, c in ipairs(criteriaList) do
-                if part.Name == c.partName and isMatchingSize(part.Size, c.partSize) then
+                if
+                    part.Name == c.partName
+                    and isMatchingSize(part.Size, c.partSize)
+                then
                     return true
                 end
             end
@@ -513,33 +685,48 @@ do
         -- Orientation (straightener)
         local function YawOnlyCFrame(pos, look)
             local flat = Vector3.new(look.X, 0, look.Z)
-            flat = (flat.Magnitude < 1e-3) and Vector3.new(0, 0, -1) or flat.Unit
+            flat = (flat.Magnitude < 1e-3) and Vector3.new(0, 0, -1)
+                or flat.Unit
             return CFrame.lookAt(pos, pos + flat, Vector3.yAxis)
         end
 
         local function BuildCFrameForMode(pos)
             if Control.modeIndex == 2 then
-                local cf = CFrame.lookAt(pos, pos + Vector3.new(0, -1, 0), Vector3.zAxis)
+                local cf = CFrame.lookAt(
+                    pos,
+                    pos + Vector3.new(0, -1, 0),
+                    Vector3.zAxis
+                )
                 return cf * CFrame.Angles(math.rad(-10), 0, math.rad(180))
             elseif Control.modeIndex == 3 then
-                local cf = CFrame.lookAt(pos, pos + Vector3.new(0, 1, 0), Vector3.zAxis)
+                local cf = CFrame.lookAt(
+                    pos,
+                    pos + Vector3.new(0, 1, 0),
+                    Vector3.zAxis
+                )
                 return cf * CFrame.Angles(math.rad(-10), 0, 0)
             end
             return nil -- mode 1 handled by yaw-level blend
         end
 
         local function startOrientationLoop()
-            if orientConn then orientConn:Disconnect() end
+            if orientConn then
+                orientConn:Disconnect()
+            end
             orientConn = RS.Heartbeat:Connect(function()
                 local v = GetClosestVehicle()
-                if not v or not v.PrimaryPart then return end
+                if not v or not v.PrimaryPart then
+                    return
+                end
                 local pivot = v:GetPivot()
                 if Control.modeIndex == 1 then
                     local flat = YawOnlyCFrame(pivot.Position, pivot.LookVector)
                     v:PivotTo(pivot:Lerp(flat, 0.35))
                 else
                     local target = BuildCFrameForMode(pivot.Position)
-                    if target then v:PivotTo(pivot:Lerp(target, 0.3)) end
+                    if target then
+                        v:PivotTo(pivot:Lerp(target, 0.3))
+                    end
                 end
             end)
         end
@@ -550,17 +737,27 @@ do
             local rotateCFrame = CFrame.new()
 
             if not UIS:GetFocusedTextBox() then
-                if UIS:IsKeyDown(Enum.KeyCode.W) then dir += Camera.CFrame.LookVector end
-                if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= Camera.CFrame.LookVector end
-                if UIS:IsKeyDown(Enum.KeyCode.D) then dir += Camera.CFrame.RightVector end
-                if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= Camera.CFrame.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.W) then
+                    dir += Camera.CFrame.LookVector
+                end
+                if UIS:IsKeyDown(Enum.KeyCode.S) then
+                    dir -= Camera.CFrame.LookVector
+                end
+                if UIS:IsKeyDown(Enum.KeyCode.D) then
+                    dir += Camera.CFrame.RightVector
+                end
+                if UIS:IsKeyDown(Enum.KeyCode.A) then
+                    dir -= Camera.CFrame.RightVector
+                end
 
                 -- Q/R live yaw
                 if UIS:IsKeyDown(Enum.KeyCode.R) then
-                    rotateCFrame = rotateCFrame * CFrame.Angles(0, -rotateSpeed, 0)
+                    rotateCFrame = rotateCFrame
+                        * CFrame.Angles(0, -rotateSpeed, 0)
                 end
                 if UIS:IsKeyDown(Enum.KeyCode.Q) then
-                    rotateCFrame = rotateCFrame * CFrame.Angles(0,  rotateSpeed, 0)
+                    rotateCFrame = rotateCFrame
+                        * CFrame.Angles(0, rotateSpeed, 0)
                 end
 
                 part.CFrame = part.CFrame * rotateCFrame
@@ -574,9 +771,17 @@ do
 
         -- Wheel no-collision enforcement
         local function setNoCollideIfWheel(p)
-            if not p:IsA("BasePart") then return end
+            if not p:IsA('BasePart') then
+                return
+            end
             local n = p.Name
-            if n == "BLWheel" or n == "BRWheel" or n == "FLWheel" or n == "FRWheel" or n == "BLWheelHub" then
+            if
+                n == 'BLWheel'
+                or n == 'BRWheel'
+                or n == 'FLWheel'
+                or n == 'FRWheel'
+                or n == 'BLWheelHub'
+            then
                 p.CanCollide = false
             end
         end
@@ -584,25 +789,34 @@ do
         workspace.DescendantAdded:Connect(function(d)
             if matchesCriteria(d) then
                 table.insert(flyObjects, d)
-                if d:IsA("BasePart") then setNoCollideIfWheel(d) end
+                if d:IsA('BasePart') then
+                    setNoCollideIfWheel(d)
+                end
             end
         end)
 
         workspace.DescendantRemoving:Connect(function(d)
             for i, obj in ipairs(flyObjects) do
-                if obj == d then table.remove(flyObjects, i) break end
+                if obj == d then
+                    table.remove(flyObjects, i)
+                    break
+                end
             end
         end)
 
         for _, d in ipairs(workspace:GetDescendants()) do
             if matchesCriteria(d) then
                 table.insert(flyObjects, d)
-                if d:IsA("BasePart") then setNoCollideIfWheel(d) end
+                if d:IsA('BasePart') then
+                    setNoCollideIfWheel(d)
+                end
             end
         end
 
         RS.Heartbeat:Connect(function()
-            for _, obj in ipairs(flyObjects) do setNoCollideIfWheel(obj) end
+            for _, obj in ipairs(flyObjects) do
+                setNoCollideIfWheel(obj)
+            end
         end)
 
         -- Mode activator
@@ -611,36 +825,57 @@ do
             local togglingOff = mode.Active
 
             -- stop previous
-            for _, m in pairs(CarModes) do m.Active = false end
-            for _, c in ipairs(connections) do c:Disconnect() end
+            for _, m in pairs(CarModes) do
+                m.Active = false
+            end
+            for _, c in ipairs(connections) do
+                c:Disconnect()
+            end
             connections = {}
 
             if togglingOff then
-                if orientConn then orientConn:Disconnect() orientConn = nil end
+                if orientConn then
+                    orientConn:Disconnect()
+                    orientConn = nil
+                end
                 return
             end
 
-            mode.Active     = true
-            currentSpeed    = mode.Speed
+            mode.Active = true
+            currentSpeed = mode.Speed
             Control.currentCarMode = mode.Key
 
             -- Straightener permission
-            local ctrlHeld = UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+            local ctrlHeld = UIS:IsKeyDown(Enum.KeyCode.LeftControl)
+                or UIS:IsKeyDown(Enum.KeyCode.RightControl)
             if mode.Key == Enum.KeyCode.F then
                 startOrientationLoop() -- always ON in F
             elseif ctrlHeld then
                 startOrientationLoop() -- temporary for Z/H while Ctrl held
                 task.defer(function()
-                    repeat task.wait() until not (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl))
-                    if orientConn then orientConn:Disconnect() orientConn = nil end
+                    repeat
+                        task.wait()
+                    until not (
+                            UIS:IsKeyDown(Enum.KeyCode.LeftControl)
+                            or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+                        )
+                    if orientConn then
+                        orientConn:Disconnect()
+                        orientConn = nil
+                    end
                 end)
             else
-                if orientConn then orientConn:Disconnect() orientConn = nil end
+                if orientConn then
+                    orientConn:Disconnect()
+                    orientConn = nil
+                end
             end
 
             -- Drive matched objects
             for _, obj in ipairs(flyObjects) do
-                if obj:IsA("BasePart") then obj.Anchored = false end
+                if obj:IsA('BasePart') then
+                    obj.Anchored = false
+                end
                 local conn = RS.Heartbeat:Connect(function()
                     controlFly(obj, currentSpeed)
                 end)
@@ -655,9 +890,14 @@ do
 
         local function Stop()
             active = false
-            for _, c in ipairs(connections) do c:Disconnect() end
+            for _, c in ipairs(connections) do
+                c:Disconnect()
+            end
             connections = {}
-            if orientConn then orientConn:Disconnect() orientConn = nil end
+            if orientConn then
+                orientConn:Disconnect()
+                orientConn = nil
+            end
         end
 
         -- Hotkey bridge
@@ -673,7 +913,7 @@ do
         return { Start = Start, Stop = Stop, Hotkey = Hotkey }
     end
 
-    Payload0Control.systems["CarModes"] = CarModeSystem()
+    Payload0Control.systems['CarModes'] = CarModeSystem()
 end
 
 --// ====================================================================
