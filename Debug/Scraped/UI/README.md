@@ -198,15 +198,6 @@ This script provides:
 
 ---
 
-## 📁 File Information
-**File:** `ClientUIController.lua`  
-**Folder:** `src/client/ui/`  
-**Version:** 1.0.0  
-**Last Updated:** 2025-10-23  
-**Author:** Jay Tunez  
-
----
-
 ## 📖 Example Usage
 ```lua
 -- Initialize and bind UI controller
