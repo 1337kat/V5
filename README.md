@@ -57,7 +57,6 @@ local scripts = {
 	'https://raw.githubusercontent.com/1337kat/V5/main/RGBKillNotifications',
 	'https://raw.githubusercontent.com/1337kat/V5/main/UnlockCameraRotation',
 	'https://raw.githubusercontent.com/1337kat/V5/main/UnloadWeapons(H)',
-	'https://raw.githubusercontent.com/1337kat/V5/main/2026/Bhop%2BDowncliff',
 	'https://raw.githubusercontent.com/1337kat/V5/main/StealLoot(V)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/Longneck(L)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/JetpackMod(i)',
@@ -70,6 +69,7 @@ local scripts = {
     'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/FPS%20BOOSTER/Colors',
+	'https://raw.githubusercontent.com/1337kat/V5/main/APPROU/Main',
 	'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/FULL%20CODE'
 }
 
