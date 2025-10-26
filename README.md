@@ -69,7 +69,7 @@ local scripts = {
     'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/FPS%20BOOSTER/Colors',
-	'https://raw.githubusercontent.com/1337kat/V5/main/APPROU/Main',
+	'https://raw.githubusercontent.com/1337kat/V5/main/2026/SwimhubSprint/Swimhub%20Speed%20Bypass%20(WORKING)',
 	'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/FULL%20CODE'
 }
 
