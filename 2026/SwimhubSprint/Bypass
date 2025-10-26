@@ -1,0 +1,149 @@
+-- Clean Swim-like SpeedHack (no exploit wrappers, no debug prints)
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+-- Grab SwimHub-style parts
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+local middle = LocalCharacter:WaitForChild("Middle")
+local bottom = LocalCharacter:WaitForChild("Bottom")
+local top = LocalCharacter:WaitForChild("Top")
+
+-- Config
+local SPEED = 70 -- max speed
+local MIN_SPEED = 17
+local bhop_enabled = true
+local downcliff_mode = false          -- toggle to test the "downcliff" behavior
+local bhop_silent = false            -- extra flag (if true, disables movement)
+
+-- Internal state
+local currentSpeed = SPEED
+local wtf = 0
+local firstActivated = false
+
+-- Local helpers / micro-optimizations
+local _IsKeyDown = UserInputService.IsKeyDown
+local _Vector3_new = Vector3.new
+local _Y_AXIS = Vector3.yAxis
+local RaycastParams_new = RaycastParams.new
+
+-- Raycast params used for downcliff checks (exclude the Ignore container)
+local rcParams = RaycastParams_new()
+rcParams.FilterType = Enum.RaycastFilterType.Exclude
+rcParams.FilterDescendantsInstances = { ignore }
+rcParams.IgnoreWater = true
+
+local function cameraFlatLook()
+    local look = Camera.CFrame.LookVector
+    local flat = _Vector3_new(look.X, 0, look.Z)
+    if flat.Magnitude == 0 then
+        return Vector3.zero
+    end
+    return flat.Unit
+end
+
+local function findGroundBelow(part, maxDistance)
+    maxDistance = maxDistance or 10
+    local origin = part.Position
+    local direction = Vector3.new(0, -1, 0) * maxDistance
+    local result = Workspace:Raycast(origin, direction, rcParams)
+    if result and result.Position then
+        return result.Position, result.Instance
+    end
+    return nil, nil
+end
+
+local conn
+conn = RunService.RenderStepped:Connect(function(delta)
+    if bhop_silent then
+        currentSpeed = SPEED
+        wtf = 0
+        return
+    end
+
+    local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
+    local ckey  = _IsKeyDown(UserInputService, Enum.KeyCode.C)
+
+    if not (bhop_enabled and not downcliff_mode and shift and ckey) then
+        currentSpeed = SPEED
+        wtf = 0
+        firstActivated = false
+        return
+    end
+
+    if not firstActivated then
+        firstActivated = true
+        task.wait(0.01)
+        local topCF = top.CFrame
+        local midCF = middle.CFrame
+        local botCF = bottom.CFrame
+
+        middle.CFrame = midCF + _Y_AXIS * 5
+        bottom.CFrame = botCF + _Y_AXIS * 5
+        top.CFrame = topCF + _Y_AXIS * 5
+    end
+
+    local flat = cameraFlatLook()
+    local move = Vector3.zero
+
+    if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
+    if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
+    if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+    if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+    if move.Magnitude == 0 then
+        currentSpeed = SPEED
+        wtf = 0
+        return
+    end
+
+    move = move.Unit
+    currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+    if downcliff_mode then
+        local groundPos = findGroundBelow(middle, 12)
+        if groundPos then
+            local desiredMiddle = groundPos + Vector3.new(0, 1.5, 0)
+            local topOffset = top.CFrame.Position - middle.Position
+            local bottomOffset = bottom.CFrame.Position - middle.Position
+
+            middle.CFrame = CFrame.new(desiredMiddle)
+            top.CFrame = CFrame.new(desiredMiddle + topOffset)
+            bottom.CFrame = CFrame.new(desiredMiddle + bottomOffset)
+
+            local forwardPush = move * math.max(currentSpeed * 0.6, MIN_SPEED)
+            middle.AssemblyLinearVelocity = forwardPush
+            top.AssemblyLinearVelocity = forwardPush
+            bottom.AssemblyLinearVelocity = forwardPush
+
+            wtf += delta
+            return
+        end
+    end
+
+    local yForce = (wtf < 0.80) and 0 or -8
+    local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
+
+    middle.AssemblyLinearVelocity = velocity
+    top.AssemblyLinearVelocity = velocity
+    bottom.AssemblyLinearVelocity = velocity
+
+    wtf += delta
+end)
+
+local function unload()
+    if conn then
+        conn:Disconnect()
+        conn = nil
+    end
+end
+
+return {
+    unload = unload,
+    setDowncliff = function(v) downcliff_mode = v end,
+    setSilent = function(v) bhop_silent = v end,
+    setEnabled = function(v) bhop_enabled = v end
+}
