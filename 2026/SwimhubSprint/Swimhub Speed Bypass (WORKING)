@@ -81,9 +81,9 @@ conn = RunService.RenderStepped:Connect(function(delta)
         local midCF = middle.CFrame
         local botCF = bottom.CFrame
 
-        middle.CFrame = midCF + _Y_AXIS * 5
-        bottom.CFrame = botCF + _Y_AXIS * 5
-        top.CFrame = topCF + _Y_AXIS * 5
+        middle.CFrame = midCF + _Y_AXIS * 6
+        bottom.CFrame = botCF + _Y_AXIS * 6
+        top.CFrame = topCF + _Y_AXIS * 6
     end
 
     local flat = cameraFlatLook()
@@ -124,7 +124,7 @@ conn = RunService.RenderStepped:Connect(function(delta)
         end
     end
 
-    local yForce = (wtf < 0.80) and 0 or -8
+    local yForce = (wtf < 0.80) and 0 or -9
     local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
 
     middle.AssemblyLinearVelocity = velocity
