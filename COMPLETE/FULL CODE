@@ -15,9 +15,11 @@
 --//    • Z/H never use straightener unless Ctrl is held (temporary)
 --//    • J key cycles straightener only for EliteHover or F-mode
 --//
---//  COLLISION RULES
+--//  COLLISION RULES (UPDATED)
 --//    • EliteHover forces collision ON on activation; T is disabled
---//    • Otherwise T toggles collision on the closest vehicle
+--//    • T now toggles collision with NO distance check:
+--//        - If we have a remembered vehicle, it toggles that one.
+--//        - Otherwise, it toggles ALL detected vehicles globally.
 --// ====================================================================
 
 ---------------------------
@@ -57,6 +59,7 @@ getgenv().Payload0Control = {
     },
     collisionOn = true,
     currentCarMode = nil, -- Enum.KeyCode of last CarMode key (Z/F/H)
+    lastVehicle = nil,    -- NEW: remembers last detected/controlled vehicle
 }
 
 ---------------------------------
@@ -115,10 +118,37 @@ local function GetClosestVehicle()
     return closest
 end
 
-local function ForceCollision(vehicle, state)
-    if not vehicle then
-        return
+-- NEW: get all vehicles (no distance logic)
+local function GetAllVehicles()
+    local results = {}
+    for _, model in ipairs(WS:GetChildren()) do
+        if model:IsA('Model') then
+            for _, ids in ipairs(VehicleIdentifiers) do
+                local ok = true
+                for _, n in ipairs(ids) do
+                    if not model:FindFirstChild(n) then
+                        ok = false
+                        break
+                    end
+                end
+                if ok then
+                    if not model.PrimaryPart then
+                        model.PrimaryPart = model:FindFirstChild('Seat')
+                            or model:FindFirstChild('lights2')
+                            or model:FindFirstChildOfClass('Part')
+                            or model:FindFirstChildOfClass('MeshPart')
+                    end
+                    table.insert(results, model)
+                    break
+                end
+            end
+        end
     end
+    return results
+end
+
+local function SetCollisionForModel(vehicle, state)
+    if not vehicle then return end
     for _, p in ipairs(vehicle:GetDescendants()) do
         if p:IsA('BasePart') then
             p.CanCollide = state
@@ -126,13 +156,21 @@ local function ForceCollision(vehicle, state)
     end
 end
 
-local function ToggleCollisionOnClosestVehicle()
-    local vehicle = GetClosestVehicle()
-    if not vehicle then
-        return
+local function SetCollisionForAll(state)
+    for _, v in ipairs(GetAllVehicles()) do
+        SetCollisionForModel(v, state)
     end
+end
+
+-- UPDATED: no distance check, uses lastVehicle if available; otherwise all
+local function ToggleCollision()
     Payload0Control.collisionOn = not Payload0Control.collisionOn
-    ForceCollision(vehicle, Payload0Control.collisionOn)
+    local v = Payload0Control.lastVehicle
+    if v and v.Parent then
+        SetCollisionForModel(v, Payload0Control.collisionOn)
+    else
+        SetCollisionForAll(Payload0Control.collisionOn)
+    end
 end
 
 ----------------------
@@ -216,11 +254,11 @@ UIS.InputBegan:Connect(function(input, gpe)
         end
         return
     elseif input.KeyCode == Enum.KeyCode.T then
-        -- T locked during EliteHover
+        -- T locked during EliteHover (unchanged)
         if Payload0Control.active == 'EliteHover' then
             return
         end
-        ToggleCollisionOnClosestVehicle()
+        ToggleCollision()
         return
     end
 end)
@@ -258,7 +296,7 @@ do
         local lastYawRight = 0
 
         local C = {
-            speed = 345, -- Original 340
+            speed = 350, -- Original 340
             upspeed = 15,
             descendKey = Enum.KeyCode.LeftShift,
             descendSpeed = 300,
@@ -304,6 +342,9 @@ do
 
         local function findNearestCar()
             car = GetClosestVehicle()
+            if car then
+                getgenv().Payload0Control.lastVehicle = car -- remember
+            end
         end
 
         local function terrainYAt(pos)
@@ -526,8 +567,16 @@ do
             findNearestCar()
 
             -- Force collision ON on activation
-            Payload0Control.collisionOn = true
-            ForceCollision(GetClosestVehicle(), true)
+            getgenv().Payload0Control.collisionOn = true
+            if getgenv().Payload0Control.lastVehicle then
+                SetCollisionForModel(getgenv().Payload0Control.lastVehicle, true)
+            else
+                local c = GetClosestVehicle()
+                if c then
+                    getgenv().Payload0Control.lastVehicle = c
+                    SetCollisionForModel(c, true)
+                end
+            end
 
             if not flyConn then
                 flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
@@ -718,6 +767,9 @@ do
                 if not v or not v.PrimaryPart then
                     return
                 end
+                -- Remember vehicle for T toggles (no distance)
+                getgenv().Payload0Control.lastVehicle = v
+
                 local pivot = v:GetPivot()
                 if Control.modeIndex == 1 then
                     local flat = YawOnlyCFrame(pivot.Position, pivot.LookVector)
