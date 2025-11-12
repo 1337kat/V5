@@ -5,14 +5,6 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 
 # Testing
 ```
---// ================================================================
---//  SILENT LOADSTRING EXECUTOR • INDEXED FAIL DETECTOR (MASKED HINTS)
---//  • Automatically counts 1..n
---//  • Shows partial name hints only
---//  • Never reveals authors or full URLs
---// ================================================================
-
--- ✅ Central __namecall Hook Manager (must be first!)
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 
