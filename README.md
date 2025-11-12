@@ -45,7 +45,6 @@ shared.failedScripts = {}
 -- ================================================================
 local scripts = {
     'https://raw.githubusercontent.com/1337kat/V5/main/AmongusHook',
-    'https://raw.githubusercontent.com/1337kat/V5/main/CleanBackpack(%22%5D%22)',
     'https://raw.githubusercontent.com/1337kat/V5/main/RGBKillNotifications',
     'https://raw.githubusercontent.com/1337kat/V5/main/UnlockCameraRotation',
     'https://raw.githubusercontent.com/1337kat/V5/main/Longneck(L)',
