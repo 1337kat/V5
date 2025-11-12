@@ -2,6 +2,18 @@
 ```lua
 setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
+# Fast Miningdrill
+```lua
+for _, v in pairs(getgc(true)) do
+    if type(v) == "table"
+        and rawget(v, "AttackCooldown")
+        and (v.Callsign == "Mining Drill" or v.HandModel == "MiningDrill")
+    then
+        v.AttackCooldown = 0
+    end
+end
+```
+
 # Fast everything
 ```lua
 for i,v in pairs(getgc(true)) do
