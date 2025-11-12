@@ -1,0 +1,43 @@
+local UserInputService = game:GetService("UserInputService")
+local player = game:GetService("Players").LocalPlayer
+local remote = player:WaitForChild("TCP")
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    -- ] (RightBracket): Clean Inside Inventory
+    -- FiresServer(7, i, false) for item indices 14–43
+    if input.KeyCode == Enum.KeyCode.RightBracket then
+        for i = 14, 43 do
+            remote:FireServer(7, i, false)
+        end
+
+    -- V: Loot All
+    -- FiresServer(12, i, true) for all slots 1–40
+    elseif input.KeyCode == Enum.KeyCode.V then
+        for i = 1, 40 do
+            remote:FireServer(12, i, true)
+        end
+
+    -- H: Loot Weapon Ammo
+    -- FiresServer(14, i, true, 118) for all slots 1–40
+    elseif input.KeyCode == Enum.KeyCode.H then
+        for i = 1, 40 do
+            remote:FireServer(14, i, true, 118)
+        end
+
+    -- U: Throw Away Everything
+    -- FiresServer(7, i, true) for all slots 1–40
+    elseif input.KeyCode == Enum.KeyCode.U then
+        for i = 1, 40 do
+            remote:FireServer(7, i, true)
+        end
+
+    -- B: Put Loot Inside Box
+    -- FiresServer(12, i, false) for slots 9–43
+    elseif input.KeyCode == Enum.KeyCode.B then
+        for i = 9, 43 do
+            remote:FireServer(12, i, false)
+        end
+    end
+end)
