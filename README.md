@@ -58,6 +58,7 @@ local scripts = {
     'https://raw.githubusercontent.com/1337kat/V5/main/FPS%20BOOSTER/Colors',
     'https://raw.githubusercontent.com/1337kat/V5/main/LOOT%20ALL/Keybind-(V)(H)(U)(B)(Bracket)',
     'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/Speedhack-Swimhub',
+	'https://raw.githubusercontent.com/1337kat/V5/main/GodMode/Indicator(X)',
     'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/CarFly'
 }
 
