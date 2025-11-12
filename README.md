@@ -2,9 +2,17 @@
 ```lua
 setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
-
-# Testing
+# Fast everything
+```lua
+for i,v in pairs(getgc(true)) do
+  if type(v) == "table" and rawget(v, "AttackCooldown") then
+      v.AttackCooldown = (0/ 100) * 10
+  end
+end
 ```
+
+# Loader
+```lua
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 
