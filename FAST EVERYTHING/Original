@@ -1,0 +1,6 @@
+-- Makes everything fast (Everything + Guns + Miningdrill)
+for i,v in pairs(getgc(true)) do
+  if type(v) == "table" and rawget(v, "AttackCooldown") then
+      v.AttackCooldown = (0/ 100) * 10
+  end
+end
