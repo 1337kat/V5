@@ -3,6 +3,138 @@
 setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
 
+# Testing
+```
+--// ================================================================
+--//  SILENT LOADSTRING EXECUTOR • INDEXED FAIL DETECTOR (MASKED HINTS)
+--//  • Automatically counts 1..n
+--//  • Shows partial name hints only
+--//  • Never reveals authors or full URLs
+--// ================================================================
+
+-- ✅ Central __namecall Hook Manager (must be first!)
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+if not shared._hookedNamecall then
+    shared._namecall_hooks = {}
+    local oldNamecall = mt.__namecall
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = { ... }
+
+        for _, hook in ipairs(shared._namecall_hooks) do
+            local ok, result = pcall(hook, self, method, args)
+            if ok and result ~= nil then
+                return result
+            end
+        end
+
+        return oldNamecall(self, unpack(args))
+    end)
+
+    shared._hookedNamecall = true
+end
+
+setreadonly(mt, true)
+
+-- ✅ One-time session guard
+if shared.allScriptsExecutedOnce then
+    warn('🚫 All scripts have already been executed this session.')
+    return
+end
+
+shared.executedScripts = shared.executedScripts or {}
+shared.failedScripts = {}
+
+-- ================================================================
+--  CONFIGURATION
+-- ================================================================
+local scripts = {
+    'https://raw.githubusercontent.com/1337kat/V5/main/AmongusHook',
+    'https://raw.githubusercontent.com/1337kat/V5/main/CleanBackpack(%22%5D%22)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/RGBKillNotifications',
+    'https://raw.githubusercontent.com/1337kat/V5/main/UnlockCameraRotation',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Longneck(L)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/JetpackMod(i)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/Freecam(K)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/ForceSprint(N)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/ESP',
+    'https://raw.githubusercontent.com/1337kat/V5/main/ChunkRemoval(R)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/3rdPerson(X)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/FPS%20BOOSTER/Colors',
+    'https://raw.githubusercontent.com/1337kat/V5/main/LOOT%20ALL/Keybind-(V)(H)(U)(B)(Bracket)',
+    'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/Speedhack-Swimhub',
+    'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/CarFly'
+}
+
+-- Masking function: shows only last 8 characters (excluding extension)
+local function maskedName(url)
+    local name = url:match('([^/]+)$') or 'Unknown'
+    name = name:gsub('%.lua', '') -- remove file extension
+    if #name > 8 then
+        return '***' .. name:sub(-8)
+    else
+        return '***' .. name
+    end
+end
+
+-- ================================================================
+--  EXECUTION LOOP
+-- ================================================================
+for i, rawUrl in ipairs(scripts) do
+    local hint = maskedName(rawUrl)
+
+    if not shared.executedScripts[i] then
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(rawUrl, true))()
+        end)
+
+        if success then
+            shared.executedScripts[i] = true
+            print(string.format('✅ #%d %s executed successfully.', i, hint))
+        else
+            table.insert(shared.failedScripts, { index = i, hint = hint })
+            warn(string.format('❌ #%d %s failed to execute.', i, hint))
+        end
+    else
+        print(
+            string.format(
+                '⏭️ #%d %s already executed this session.',
+                i,
+                hint
+            )
+        )
+    end
+end
+
+shared.allScriptsExecutedOnce = true
+
+-- ================================================================
+--  POST-RUN SUMMARY
+-- ================================================================
+task.delay(3, function()
+    if #shared.failedScripts > 0 then
+        warn('=== ❌ FAILED SCRIPTS SUMMARY ===')
+        for _, item in ipairs(shared.failedScripts) do
+            warn(string.format('• #%d %s failed', item.index, item.hint))
+        end
+        warn(
+            string.format(
+                '=== %d / %d failed ===',
+                #shared.failedScripts,
+                #scripts
+            )
+        )
+    else
+        print(
+            string.format('✅ All %d scripts executed successfully.', #scripts)
+        )
+    end
+end)
+
+```
 # 2026 Release
 ```lua
 --// ================================================================
