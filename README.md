@@ -2,26 +2,6 @@
 ```lua
 setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
-# Fast Miningdrill
-```lua
-for _, v in pairs(getgc(true)) do
-    if type(v) == "table"
-        and rawget(v, "AttackCooldown")
-        and (v.Callsign == "Mining Drill" or v.HandModel == "MiningDrill")
-    then
-        v.AttackCooldown = 0
-    end
-end
-```
-
-# Fast everything
-```lua
-for i,v in pairs(getgc(true)) do
-  if type(v) == "table" and rawget(v, "AttackCooldown") then
-      v.AttackCooldown = (0/ 100) * 10
-  end
-end
-```
 
 # Loader
 ```lua
@@ -78,6 +58,7 @@ local scripts = {
     'https://raw.githubusercontent.com/1337kat/V5/main/LOOT%20ALL/Keybind-(V)(H)(U)(B)(Bracket)',
     'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/Speedhack-Swimhub',
 	'https://raw.githubusercontent.com/1337kat/V5/main/Boat/SpeedBoat(V)',
+	'https://raw.githubusercontent.com/1337kat/V5/main/FAST%20EVERYTHING/MiningDrill',
     'https://raw.githubusercontent.com/1337kat/V5/main/COMPLETE/CarFly'
 }
 
