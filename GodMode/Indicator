@@ -1,0 +1,70 @@
+--[[ 
+🟢 GOD MODE • Simple Version
+Toggle: X
+Adds vertical offset to TCP movement packets (float effect)
+Shows "GOD MODE" on screen when active
+]]
+
+local Players = game:GetService('Players')
+local UserInputService = game:GetService('UserInputService')
+
+local LocalPlayer = Players.LocalPlayer
+local tcp = LocalPlayer:WaitForChild('TCP')
+
+local godmodeActive = false
+local godmodeStrength = 6 -- vertical float height
+
+-- Center-screen indicator
+local indicator = Drawing.new('Text')
+indicator.Text = 'Float On'
+indicator.Size = 25
+indicator.Center = true
+indicator.Outline = true
+indicator.OutlineColor = Color3.new(0, 0, 0)
+indicator.Color = Color3.fromRGB(90, 255, 90)
+indicator.Visible = false
+indicator.Font = Drawing.Fonts.Monospace
+
+-- Keep indicator centered
+task.spawn(function()
+    while task.wait(0.1) do
+        local cam = workspace.CurrentCamera
+        if cam then
+            local vp = cam.ViewportSize
+            indicator.Position = Vector2.new(vp.X / 2, vp.Y / 2)
+        end
+    end
+end)
+
+-- Hook TCP movement
+local oldNamecall
+oldNamecall = hookmetamethod(game, '__namecall', function(self, ...)
+    local method = getnamecallmethod()
+    local args = { ... }
+
+    if
+        method == 'FireServer'
+        and self == tcp
+        and args[1] == 1
+        and godmodeActive
+    then
+        if typeof(args[2]) == 'Vector3' then
+            args[2] =
+                Vector3.new(args[2].X, args[2].Y + godmodeStrength, args[2].Z)
+        end
+        return oldNamecall(self, unpack(args))
+    end
+
+    return oldNamecall(self, ...)
+end)
+
+-- Toggle key
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+    if input.KeyCode == Enum.KeyCode.X then
+        godmodeActive = not godmodeActive
+        indicator.Visible = godmodeActive
+    end
+end)
