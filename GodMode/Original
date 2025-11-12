@@ -1,0 +1,40 @@
+--[[ 
+🌊 TCP FLOAT • Standalone Version
+Toggles vertical float by modifying outgoing TCP movement packets.
+Key: X
+]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local tcp = LocalPlayer:WaitForChild("TCP")
+
+local godmodeActive = false
+local godmodeStrength = 6 -- height offset (can be changed)
+
+-- Hook outgoing FireServer calls to TCP
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = { ... }
+
+    -- ID 1 == PLAYER_MOVE (based on the main file)
+    if method == "FireServer" and self == tcp and args[1] == 1 and godmodeActive then
+        -- Add a small Y-offset to the movement packet position
+        if typeof(args[2]) == "Vector3" then
+            args[2] = Vector3.new(args[2].X, args[2].Y + godmodeStrength, args[2].Z)
+        end
+        return oldNamecall(self, unpack(args))
+    end
+
+    return oldNamecall(self, ...)
+end)
+
+-- Toggle with X
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.X then
+        godmodeActive = not godmodeActive
+        print("TCP float:", godmodeActive and "ON" or "OFF")
+    end
+end)
