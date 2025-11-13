@@ -9,15 +9,24 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 --  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET
 -- ================================================================
 local function isParallelOnMainEnabled()
+    -- (Executors sometimes update fflags 1 tick later)
+    task.wait()
+
     local ok, value = pcall(function()
         return getfflag and getfflag("DebugRunParallelLuaOnMainThread")
     end)
 
-    return ok and value == "True"
+    if not ok or value == nil then
+        return false
+    end
+
+    -- normalize ("True", true, "1", etc.)
+    value = tostring(value):lower()
+
+    return (value == "true" or value == "1")
 end
 
 if not isParallelOnMainEnabled() then
-    -- clean notification
     local CoreGui = game:GetService("CoreGui")
     local sg = Instance.new("ScreenGui")
     sg.Parent = CoreGui
@@ -34,7 +43,7 @@ if not isParallelOnMainEnabled() then
     label.Font = Enum.Font.Code
     label.Text = "⚠️ Please run: setfflag('DebugRunParallelLuaOnMainThread','True')"
     label.TextStrokeTransparency = 0.3
-    label.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 
     warn("⚠️ DebugRunParallelLuaOnMainThread is NOT enabled. Script execution blocked.")
     return
