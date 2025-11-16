@@ -3,6 +3,168 @@
 setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
 
+```lua
+-- ================================================================
+--  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET
+-- ================================================================
+local function isParallelOnMainEnabled()
+    -- (Executors sometimes update fflags 1 tick later)
+    task.wait()
+
+    local ok, value = pcall(function()
+        return getfflag and getfflag('DebugRunParallelLuaOnMainThread')
+    end)
+
+    if not ok or value == nil then
+        return false
+    end
+
+    -- normalize ("True", true, "1", etc.)
+    value = tostring(value):lower()
+
+    return (value == 'true' or value == '1')
+end
+
+if not isParallelOnMainEnabled() then
+    local CoreGui = game:GetService('CoreGui')
+    local sg = Instance.new('ScreenGui')
+    sg.Parent = CoreGui
+    sg.ResetOnSpawn = false
+    sg.Name = 'FFlagWarning'
+
+    local label = Instance.new('TextLabel')
+    label.Parent = sg
+    label.Size = UDim2.new(1, 0, 0, 60)
+    label.Position = UDim2.new(0, 0, 0, 20)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 90, 90)
+    label.TextSize = 28
+    label.Font = Enum.Font.Code
+    label.Text =
+        "⚠️ Please run: setfflag('DebugRunParallelLuaOnMainThread','True')"
+    label.TextStrokeTransparency = 0.3
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+    warn(
+        '⚠️ DebugRunParallelLuaOnMainThread is NOT enabled. Script execution blocked.'
+    )
+    return
+end
+
+-- ================================================================
+--  METATABLE HOOK SETUP
+-- ================================================================
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+if not shared._hookedNamecall then
+    shared._namecall_hooks = {}
+    local oldNamecall = mt.__namecall
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = { ... }
+
+        for _, hook in ipairs(shared._namecall_hooks) do
+            local ok, result = pcall(hook, self, method, args)
+            if ok and result ~= nil then
+                return result
+            end
+        end
+
+        return oldNamecall(self, unpack(args))
+    end)
+
+    shared._hookedNamecall = true
+end
+
+setreadonly(mt, true)
+
+-- ================================================================
+--  ONE-TIME SESSION GUARD
+-- ================================================================
+if shared.allScriptsExecutedOnce then
+    warn('🚫 All scripts have already been executed this session.')
+    return
+end
+
+shared.executedScripts = shared.executedScripts or {}
+shared.failedScripts = {}
+
+-- ================================================================
+--  CONFIGURATION
+-- ================================================================
+local scripts = {
+    'https://raw.githubusercontent.com/1337kat/V5/main/main',
+}
+
+-- Masking function: shows only last 8 characters (excluding extension)
+local function maskedName(url)
+    local name = url:match('([^/]+)$') or 'Unknown'
+    name = name:gsub('%.lua', '') -- remove file extension
+    if #name > 8 then
+        return '***' .. name:sub(-8)
+    else
+        return '***' .. name
+    end
+end
+
+-- ================================================================
+--  EXECUTION LOOP
+-- ================================================================
+for i, rawUrl in ipairs(scripts) do
+    local hint = maskedName(rawUrl)
+
+    if not shared.executedScripts[i] then
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(rawUrl, true))()
+        end)
+
+        if success then
+            shared.executedScripts[i] = true
+            print(string.format('✅ #%d %s executed successfully.', i, hint))
+        else
+            table.insert(shared.failedScripts, { index = i, hint = hint })
+            warn(string.format('❌ #%d %s failed to execute.', i, hint))
+        end
+    else
+        print(
+            string.format(
+                '⏭️ #%d %s already executed this session.',
+                i,
+                hint
+            )
+        )
+    end
+end
+
+shared.allScriptsExecutedOnce = true
+
+-- ================================================================
+--  POST-RUN SUMMARY
+-- ================================================================
+task.delay(3, function()
+    if #shared.failedScripts > 0 then
+        warn('=== ❌ FAILED SCRIPTS SUMMARY ===')
+        for _, item in ipairs(shared.failedScripts) do
+            warn(string.format('• #%d %s failed', item.index, item.hint))
+        end
+        warn(
+            string.format(
+                '=== %d / %d failed ===',
+                #shared.failedScripts,
+                #scripts
+            )
+        )
+    else
+        print(
+            string.format('✅ All %d scripts executed successfully.', #scripts)
+        )
+    end
+end)
+
+```
+
 # Loader
 ```lua
 -- ================================================================
@@ -177,7 +339,6 @@ task.delay(3, function()
         )
     end
 end)
-
 ```
 # 2026 Release
 ```lua
