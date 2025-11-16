@@ -1232,14 +1232,25 @@ task.spawn(function() -- << ISOLATED SPEEDBOAT SYSTEM >>
 
 end)
 
-task.spawn(function() -- << ISOLATED BHOP SYSTEM >>
 
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+
+
+-- Fixed Bhop (Old version broke)
+task.spawn(function() -- << SAFE ISOLATED BHOP SYSTEM >>
+
+-- Wait for camera safely
 local Workspace = game:GetService("Workspace")
+while not Workspace.CurrentCamera do
+    task.wait()
+end
 local Camera = Workspace.CurrentCamera
 
--- Grab SwimHub-style parts
+-- Services
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+-- Grab SwimHub-style parts (fully safe)
 local const = Workspace:WaitForChild("Const")
 local ignore = const:WaitForChild("Ignore")
 local LocalCharacter = ignore:WaitForChild("LocalCharacter")
@@ -1248,24 +1259,24 @@ local bottom = LocalCharacter:WaitForChild("Bottom")
 local top = LocalCharacter:WaitForChild("Top")
 
 -- Config
-local SPEED = 70 -- max speed
+local SPEED = 70
 local MIN_SPEED = 17
 local bhop_enabled = true
-local downcliff_mode = false          -- toggle to test the "downcliff" behavior
-local bhop_silent = false            -- extra flag (if true, disables movement)
+local downcliff_mode = false
+local bhop_silent = false
 
 -- Internal state
 local currentSpeed = SPEED
 local wtf = 0
 local firstActivated = false
 
--- Local helpers / micro-optimizations
+-- Optimized locals
 local _IsKeyDown = UserInputService.IsKeyDown
 local _Vector3_new = Vector3.new
 local _Y_AXIS = Vector3.yAxis
 local RaycastParams_new = RaycastParams.new
 
--- Raycast params used for downcliff checks (exclude the Ignore container)
+-- Raycast params
 local rcParams = RaycastParams_new()
 rcParams.FilterType = Enum.RaycastFilterType.Exclude
 rcParams.FilterDescendantsInstances = { ignore }
@@ -1283,14 +1294,14 @@ end
 local function findGroundBelow(part, maxDistance)
     maxDistance = maxDistance or 10
     local origin = part.Position
-    local direction = Vector3.new(0, -1, 0) * maxDistance
-    local result = Workspace:Raycast(origin, direction, rcParams)
+    local result = Workspace:Raycast(origin, Vector3.new(0, -maxDistance, 0), rcParams)
     if result and result.Position then
-        return result.Position, result.Instance
+        return result.Position
     end
-    return nil, nil
+    return nil
 end
 
+-- Create connection OUTSIDE task.spawn (critical fix)
 local conn
 conn = RunService.RenderStepped:Connect(function(delta)
     if bhop_silent then
@@ -1312,6 +1323,7 @@ conn = RunService.RenderStepped:Connect(function(delta)
     if not firstActivated then
         firstActivated = true
         task.wait(0.01)
+
         local topCF = top.CFrame
         local midCF = middle.CFrame
         local botCF = bottom.CFrame
@@ -1369,8 +1381,8 @@ conn = RunService.RenderStepped:Connect(function(delta)
     wtf += delta
 end)
 
--- Cleanup on script end
-game:GetService("Players").PlayerRemoving:Connect(function()
+-- Cleanup
+Players.PlayerRemoving:Connect(function()
     if conn then
         conn:Disconnect()
     end
