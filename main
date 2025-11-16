@@ -1235,160 +1235,181 @@ end)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 -- Fixed Bhop (Old version broke)
-task.spawn(function() -- << SAFE ISOLATED BHOP SYSTEM >>
+task.spawn(function() -- << FULLY ISOLATED BHOP SYSTEM >>
 
--- Wait for camera safely
-local Workspace = game:GetService("Workspace")
-while not Workspace.CurrentCamera do
-    task.wait()
-end
-local Camera = Workspace.CurrentCamera
+    -- Shared config (internal only)
+    local config = {
+        bhop_enabled = true,
+        downcliff_mode = false,
+        bhop_silent = false
+    }
 
--- Services
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
+    -- Exposed API (the “control interface”)
+    _G.PAYLOAD0_BHOP = {
+        setEnabled = function(v) config.bhop_enabled = v end,
+        setSilent = function(v) config.bhop_silent = v end,
+        setDowncliff = function(v) config.downcliff_mode = v end,
+        unload = function()
+            if config._conn then
+                config._conn:Disconnect()
+                config._conn = nil
+            end
+        end
+    }
 
--- Grab SwimHub-style parts (fully safe)
-local const = Workspace:WaitForChild("Const")
-local ignore = const:WaitForChild("Ignore")
-local LocalCharacter = ignore:WaitForChild("LocalCharacter")
-local middle = LocalCharacter:WaitForChild("Middle")
-local bottom = LocalCharacter:WaitForChild("Bottom")
-local top = LocalCharacter:WaitForChild("Top")
+    -------------------------------------------------------------------------
+    -- Internal BHOP System (entire logic contained inside the spawned thread)
+    -------------------------------------------------------------------------
 
--- Config
-local SPEED = 70
-local MIN_SPEED = 17
-local bhop_enabled = true
-local downcliff_mode = false
-local bhop_silent = false
+    -- Services
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local Workspace = game:GetService("Workspace")
+    local Camera = Workspace.CurrentCamera or Workspace:WaitForChild("CurrentCamera")
 
--- Internal state
-local currentSpeed = SPEED
-local wtf = 0
-local firstActivated = false
+    -- Character Parts
+    local const = Workspace:WaitForChild("Const")
+    local ignore = const:WaitForChild("Ignore")
+    local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+    local middle = LocalCharacter:WaitForChild("Middle")
+    local bottom = LocalCharacter:WaitForChild("Bottom")
+    local top = LocalCharacter:WaitForChild("Top")
 
--- Optimized locals
-local _IsKeyDown = UserInputService.IsKeyDown
-local _Vector3_new = Vector3.new
-local _Y_AXIS = Vector3.yAxis
-local RaycastParams_new = RaycastParams.new
+    -- Constants
+    local SPEED = 70
+    local MIN_SPEED = 17
 
--- Raycast params
-local rcParams = RaycastParams_new()
-rcParams.FilterType = Enum.RaycastFilterType.Exclude
-rcParams.FilterDescendantsInstances = { ignore }
-rcParams.IgnoreWater = true
+    -- Internal state
+    local currentSpeed = SPEED
+    local wtf = 0
+    local firstActivated = false
 
-local function cameraFlatLook()
-    local look = Camera.CFrame.LookVector
-    local flat = _Vector3_new(look.X, 0, look.Z)
-    if flat.Magnitude == 0 then
-        return Vector3.zero
-    end
-    return flat.Unit
-end
+    -- Micro-optimizations
+    local _IsKeyDown = UserInputService.IsKeyDown
+    local _Vector3_new = Vector3.new
+    local Y_AXIS = Vector3.yAxis
 
-local function findGroundBelow(part, maxDistance)
-    maxDistance = maxDistance or 10
-    local origin = part.Position
-    local result = Workspace:Raycast(origin, Vector3.new(0, -maxDistance, 0), rcParams)
-    if result and result.Position then
-        return result.Position
-    end
-    return nil
-end
+    -- Raycast params
+    local rcParams = RaycastParams.new()
+    rcParams.FilterType = Enum.RaycastFilterType.Exclude
+    rcParams.FilterDescendantsInstances = { ignore }
+    rcParams.IgnoreWater = true
 
--- Create connection OUTSIDE task.spawn (critical fix)
-local conn
-conn = RunService.RenderStepped:Connect(function(delta)
-    if bhop_silent then
-        currentSpeed = SPEED
-        wtf = 0
-        return
+    -- Helpers
+    local function cameraFlatLook()
+        local look = Camera.CFrame.LookVector
+        local flat = _Vector3_new(look.X, 0, look.Z)
+        return (flat.Magnitude == 0) and Vector3.zero or flat.Unit
     end
 
-    local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
-    local ckey  = _IsKeyDown(UserInputService, Enum.KeyCode.C)
-
-    if not (bhop_enabled and not downcliff_mode and shift and ckey) then
-        currentSpeed = SPEED
-        wtf = 0
-        firstActivated = false
-        return
+    local function findGroundBelow(part, maxDistance)
+        local result = Workspace:Raycast(
+            part.Position,
+            Vector3.new(0, -maxDistance, 0),
+            rcParams
+        )
+        return result and result.Position, result and result.Instance
     end
 
-    if not firstActivated then
-        firstActivated = true
-        task.wait(0.01)
-
-        local topCF = top.CFrame
-        local midCF = middle.CFrame
-        local botCF = bottom.CFrame
-
-        middle.CFrame = midCF + _Y_AXIS * 6
-        bottom.CFrame = botCF + _Y_AXIS * 6
-        top.CFrame = topCF + _Y_AXIS * 6
-    end
-
-    local flat = cameraFlatLook()
-    local move = Vector3.zero
-
-    if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
-    if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
-    if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
-    if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
-
-    if move.Magnitude == 0 then
-        currentSpeed = SPEED
-        wtf = 0
-        return
-    end
-
-    move = move.Unit
-    currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
-
-    if downcliff_mode then
-        local groundPos = findGroundBelow(middle, 12)
-        if groundPos then
-            local desiredMiddle = groundPos + Vector3.new(0, 1.5, 0)
-            local topOffset = top.CFrame.Position - middle.Position
-            local bottomOffset = bottom.CFrame.Position - middle.Position
-
-            middle.CFrame = CFrame.new(desiredMiddle)
-            top.CFrame = CFrame.new(desiredMiddle + topOffset)
-            bottom.CFrame = CFrame.new(desiredMiddle + bottomOffset)
-
-            local forwardPush = move * math.max(currentSpeed * 0.6, MIN_SPEED)
-            middle.AssemblyLinearVelocity = forwardPush
-            top.AssemblyLinearVelocity = forwardPush
-            bottom.AssemblyLinearVelocity = forwardPush
-
-            wtf += delta
+    -------------------------------------------------------------------------
+    -- Main Movement Loop
+    -------------------------------------------------------------------------
+    config._conn = RunService.RenderStepped:Connect(function(delta)
+        if config.bhop_silent then
+            currentSpeed = SPEED
+            wtf = 0
             return
         end
-    end
 
-    local yForce = (wtf < 0.80) and 0 or -9
-    local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
+        local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
+        local ckey = _IsKeyDown(UserInputService, Enum.KeyCode.C)
 
-    middle.AssemblyLinearVelocity = velocity
-    top.AssemblyLinearVelocity = velocity
-    bottom.AssemblyLinearVelocity = velocity
+        if not (config.bhop_enabled and not config.downcliff_mode and shift and ckey) then
+            currentSpeed = SPEED
+            wtf = 0
+            firstActivated = false
+            return
+        end
 
-    wtf += delta
+        -- Initial raise
+        if not firstActivated then
+            firstActivated = true
+            task.wait(0.01)
+            local topCF, midCF, botCF = top.CFrame, middle.CFrame, bottom.CFrame
+            middle.CFrame = midCF + Y_AXIS * 6
+            bottom.CFrame = botCF + Y_AXIS * 6
+            top.CFrame = topCF + Y_AXIS * 6
+        end
+
+        local flat = cameraFlatLook()
+        local move = Vector3.zero
+
+        if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
+        if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
+        if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+        if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+        if move.Magnitude == 0 then
+            currentSpeed = SPEED
+            wtf = 0
+            return
+        end
+
+        move = move.Unit
+        currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+        -- Downcliff mode
+        if config.downcliff_mode then
+            local groundPos = findGroundBelow(middle, 12)
+            if groundPos then
+                local desired = groundPos + Vector3.new(0, 1.5, 0)
+                local topOffset = top.Position - middle.Position
+                local bottomOffset = bottom.Position - middle.Position
+
+                middle.Position = desired
+                top.Position = desired + topOffset
+                bottom.Position = desired + bottomOffset
+
+                local forward = move * math.max(currentSpeed * 0.6, MIN_SPEED)
+                middle.AssemblyLinearVelocity = forward
+                top.AssemblyLinearVelocity = forward
+                bottom.AssemblyLinearVelocity = forward
+
+                wtf += delta
+                return
+            end
+        end
+
+        local yForce = (wtf < 0.80) and 0 or -9
+        local finalVel = move * currentSpeed + Vector3.new(0, yForce, 0)
+
+        middle.AssemblyLinearVelocity = finalVel
+        top.AssemblyLinearVelocity = finalVel
+        bottom.AssemblyLinearVelocity = finalVel
+
+        wtf += delta
+    end)
 end)
 
--- Cleanup
-Players.PlayerRemoving:Connect(function()
-    if conn then
-        conn:Disconnect()
-    end
-end)
 
-end)
+
+
+
+
+
+
 
 
 
