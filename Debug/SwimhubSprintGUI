@@ -1,0 +1,315 @@
+--// =====================================================================
+--//  CLEAN SWIM-LIKE SPEEDHACK + LIVE AUTO-APPLY TUNER (SPEED / YFORCE / DELAY / LIFT)
+--//  • Hold Shift + C to activate
+--//  • Type directly into the fields (auto-applies on Enter or focus loss)
+--//  • Fully live-updating: SPEED, Y Force, Delay threshold, and Lift Height
+--//  • GUI is now fully draggable
+--// =====================================================================
+
+--// ====== SERVICES ======
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+--// ====== REFERENCES ======
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+local middle = LocalCharacter:WaitForChild("Middle")
+local bottom = LocalCharacter:WaitForChild("Bottom")
+local top = LocalCharacter:WaitForChild("Top")
+
+--// ====== CONFIG ======
+local SPEED = 120           -- max horizontal speed
+local MIN_SPEED = 17
+local bhop_enabled = true
+local downcliff_mode = false
+local bhop_silent = false
+
+-- Live-tunable values
+local manualYForce = -16    -- Y force value
+local wtfThreshold = 0.45   -- delay before Y force activates
+local liftAmount = 6        -- vertical lift amount (Y_AXIS * liftAmount)
+
+--// ====== INTERNAL ======
+local currentSpeed = SPEED
+local wtf = 0
+local firstActivated = false
+
+--// ====== OPTIMIZED LOCALS ======
+local _IsKeyDown = UserInputService.IsKeyDown
+local _Vector3_new = Vector3.new
+local _Y_AXIS = Vector3.yAxis
+local RaycastParams_new = RaycastParams.new
+
+local rcParams = RaycastParams_new()
+rcParams.FilterType = Enum.RaycastFilterType.Exclude
+rcParams.FilterDescendantsInstances = { ignore }
+rcParams.IgnoreWater = true
+
+--// ====== UTILITIES ======
+local function cameraFlatLook()
+	local look = Camera.CFrame.LookVector
+	local flat = _Vector3_new(look.X, 0, look.Z)
+	if flat.Magnitude == 0 then
+		return Vector3.zero
+	end
+	return flat.Unit
+end
+
+local function findGroundBelow(part, maxDistance)
+	maxDistance = maxDistance or 10
+	local origin = part.Position
+	local direction = Vector3.new(0, -1, 0) * maxDistance
+	local result = Workspace:Raycast(origin, direction, rcParams)
+	if result and result.Position then
+		return result.Position, result.Instance
+	end
+	return nil, nil
+end
+
+--// ====== GUI CREATION ======
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SpeedTunerGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 230, 0, 160)
+Frame.Position = UDim2.new(0, 40, 0, 40)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Text = "Speedhack Tuner"
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = Frame
+
+--// ====== DRAGGING SYSTEM ======
+local dragging = false
+local dragInput, dragStart, startPos
+
+local function updateDrag(input)
+	local delta = input.Position - dragStart
+	Frame.Position = UDim2.new(
+		startPos.X.Scale,
+		startPos.X.Offset + delta.X,
+		startPos.Y.Scale,
+		startPos.Y.Offset + delta.Y
+	)
+end
+
+local function makeDraggable(area)
+	area.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = Frame.Position
+
+			local conn
+			conn = input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+					conn:Disconnect()
+				end
+			end)
+		end
+	end)
+
+	area.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			dragInput = input
+		end
+	end)
+end
+
+makeDraggable(Frame)
+makeDraggable(Title)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and input == dragInput then
+		updateDrag(input)
+	end
+end)
+
+--// ====== HELPER: Label + Box Pair ======
+local function makeBox(labelText, yPos, default)
+	local label = Instance.new("TextLabel")
+	label.Text = labelText
+	label.Size = UDim2.new(0, 90, 0, 25)
+	label.Position = UDim2.new(0, 10, 0, yPos)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(200, 200, 200)
+	label.TextSize = 14
+	label.Font = Enum.Font.SourceSans
+	label.Parent = Frame
+
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0, 110, 0, 25)
+	box.Position = UDim2.new(0, 110, 0, yPos)
+	box.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	box.ClearTextOnFocus = false
+	box.TextSize = 14
+	box.Text = tostring(default)
+	box.Parent = Frame
+
+	return box
+end
+
+local SpeedBox = makeBox("Speed:", 35, SPEED)
+local YForceBox = makeBox("Y Force:", 65, manualYForce)
+local DelayBox = makeBox("Delay:", 95, wtfThreshold)
+local LiftBox = makeBox("Lift (Y*):", 125, liftAmount)
+
+--// ====== AUTO APPLY HANDLERS ======
+local function toNumber(text, fallback)
+	local n = tonumber(text)
+	return n or fallback
+end
+
+local function updateSpeed()
+	local newVal = toNumber(SpeedBox.Text, SPEED)
+	if newVal ~= SPEED then
+		SPEED = newVal
+		print("[AutoApply] SPEED set to:", SPEED)
+	end
+end
+
+local function updateYForce()
+	local newVal = toNumber(YForceBox.Text, manualYForce)
+	if newVal ~= manualYForce then
+		manualYForce = newVal
+		print("[AutoApply] Y Force set to:", manualYForce)
+	end
+end
+
+local function updateDelay()
+	local newVal = toNumber(DelayBox.Text, wtfThreshold)
+	if newVal ~= wtfThreshold then
+		wtfThreshold = newVal
+		print("[AutoApply] Delay threshold set to:", wtfThreshold)
+	end
+end
+
+local function updateLift()
+	local newVal = toNumber(LiftBox.Text, liftAmount)
+	if newVal ~= liftAmount then
+		liftAmount = newVal
+		print("[AutoApply] Lift height set to:", liftAmount)
+	end
+end
+
+SpeedBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed or true then updateSpeed() end
+end)
+
+YForceBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed or true then updateYForce() end
+end)
+
+DelayBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed or true then updateDelay() end
+end)
+
+LiftBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed or true then updateLift() end
+end)
+
+--// ====== MAIN RUNTIME ======
+local conn
+conn = RunService.RenderStepped:Connect(function(delta)
+	if bhop_silent then
+		currentSpeed = SPEED
+		wtf = 0
+		return
+	end
+
+	local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
+	local ckey  = _IsKeyDown(UserInputService, Enum.KeyCode.C)
+
+	if not (bhop_enabled and not downcliff_mode and shift and ckey) then
+		currentSpeed = SPEED
+		wtf = 0
+		firstActivated = false
+		return
+	end
+
+	if not firstActivated then
+		firstActivated = true
+		task.wait(0.01)
+		local topCF = top.CFrame
+		local midCF = middle.CFrame
+		local botCF = bottom.CFrame
+		middle.CFrame = midCF + _Y_AXIS * liftAmount
+		bottom.CFrame = botCF + _Y_AXIS * liftAmount
+		top.CFrame = topCF + _Y_AXIS * liftAmount
+	end
+
+	local flat = cameraFlatLook()
+	local move = Vector3.zero
+
+	if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
+	if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
+	if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+	if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+	if move.Magnitude == 0 then
+		currentSpeed = SPEED
+		wtf = 0
+		return
+	end
+
+	move = move.Unit
+	currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+	if downcliff_mode then
+		local groundPos = findGroundBelow(middle, 12)
+		if groundPos then
+			local desiredMiddle = groundPos + Vector3.new(0, 1.5, 0)
+			local topOffset = top.CFrame.Position - middle.Position
+			local bottomOffset = bottom.CFrame.Position - middle.Position
+			middle.CFrame = CFrame.new(desiredMiddle)
+			top.CFrame = CFrame.new(desiredMiddle + topOffset)
+			bottom.CFrame = CFrame.new(desiredMiddle + bottomOffset)
+			local forwardPush = move * math.max(currentSpeed * 0.6, MIN_SPEED)
+			middle.AssemblyLinearVelocity = forwardPush
+			top.AssemblyLinearVelocity = forwardPush
+			bottom.AssemblyLinearVelocity = forwardPush
+			wtf += delta
+			return
+		end
+	end
+
+	local yForce = (wtf < wtfThreshold) and 0 or manualYForce
+	local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
+	middle.AssemblyLinearVelocity = velocity
+	top.AssemblyLinearVelocity = velocity
+	bottom.AssemblyLinearVelocity = velocity
+	wtf += delta
+end)
+
+--// ====== CLEANUP ======
+local function unload()
+	if conn then
+		conn:Disconnect()
+		conn = nil
+	end
+	if ScreenGui then
+		ScreenGui:Destroy()
+	end
+end
+
+return {
+	unload = unload,
+	setDowncliff = function(v) downcliff_mode = v end,
+	setSilent = function(v) bhop_silent = v end,
+	setEnabled = function(v) bhop_enabled = v end
+}
