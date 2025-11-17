@@ -1,3 +1,14 @@
+task.spawn(function()  -- << Isolated EquipTime
+    -- Full GC scan isolated in its own thread
+    for _, obj in pairs(getgc(true)) do
+        if type(obj) == "table" and rawget(obj, "EquipTime") then
+            -- Zero equip delay (or change to 0.02/0.05 if needed)
+            obj.EquipTime = 0
+        end
+    end
+end)
+
+
 task.spawn(function() -- << ISOLATED CAR VEHICLE CONTROL SYSTEM >>
 
     local Players = game:GetService('Players')
