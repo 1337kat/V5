@@ -1,0 +1,5 @@
+for _, obj in pairs(getgc(true)) do
+    if type(obj) == 'table' and rawget(obj, 'EquipTime') then
+        obj.EquipTime = 0 -- or 0.02 / 0.05 if you want micro-delay
+    end
+end
