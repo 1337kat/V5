@@ -1,0 +1,13 @@
+task.spawn(function() -- << isolated MiningDrill EquipTime >>
+    for _, obj in pairs(getgc(true)) do
+        if type(obj) == "table"
+            and rawget(obj, "EquipTime")
+            and (
+                obj.Callsign == "Mining Drill" or
+                obj.HandModel == "MiningDrill"
+            )
+        then
+            obj.EquipTime = 0   -- instant equip only for MiningDrill
+        end
+    end
+end)
