@@ -1,3 +1,40 @@
+-- Throwable Objects
+task.spawn(function() -- << ISOLATED BUBBLE >>
+
+    local partials = {
+        "flash",
+        "c4",
+        "grenade",
+        "molotov",
+        "handmade charge",
+    }
+
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "table"
+            and rawget(v, "AttackCooldown")
+            and v.Callsign
+        then
+            local name = tostring(v.Callsign):lower()
+
+            for _, ref in ipairs(partials) do
+                if name:find(ref) then
+                    v.AttackCooldown = 0
+                    break
+                end
+            end
+        end
+    end
+
+end) -- << END BUBBLE >>
+
+
+
+
+
+
+
+
+-- EQUIP
 task.spawn(function()  -- << Isolated EquipTime
     -- Full GC scan isolated in its own thread
     for _, obj in pairs(getgc(true)) do
@@ -7,6 +44,14 @@ task.spawn(function()  -- << Isolated EquipTime
         end
     end
 end)
+
+
+
+
+
+
+
+
 
 
 task.spawn(function() -- << ISOLATED CAR VEHICLE CONTROL SYSTEM >>
