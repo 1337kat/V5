@@ -1,0 +1,2138 @@
+-- Throwable Objects
+task.spawn(function() -- << ISOLATED BUBBLE >>
+
+    local partials = {
+        "flash",
+        "c4",
+        "grenade",
+        "molotov",
+        "handmade charge",
+    }
+
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "table"
+            and rawget(v, "AttackCooldown")
+            and v.Callsign
+        then
+            local name = tostring(v.Callsign):lower()
+
+            for _, ref in ipairs(partials) do
+                if name:find(ref) then
+                    v.AttackCooldown = 0
+                    break
+                end
+            end
+        end
+    end
+
+end) -- << END BUBBLE >>
+
+
+
+
+
+
+
+
+
+
+
+task.spawn(function() -- << ISOLATED CAR VEHICLE CONTROL SYSTEM >>
+
+    local Players = game:GetService('Players')
+    local RunService = game:GetService('RunService')
+    local Workspace = game:GetService('Workspace')
+    local UserInputService = game:GetService('UserInputService')
+    local Camera = Workspace.CurrentCamera
+    local LocalPlayer = Players.LocalPlayer
+
+    local cloneref = cloneref or function(x)
+        return x
+    end
+    local UIS = cloneref(UserInputService)
+    local RS = cloneref(RunService)
+    local WS = cloneref(Workspace)
+
+    if not LPH_JIT_MAX then
+        LPH_JIT_MAX = function(...)
+            return ...
+        end
+    end
+
+    -----------------------------
+    -- Shared Control Registry --
+    -----------------------------
+    local Payload0Control = {
+        active = nil, -- "EliteHover" | "CarModes" | nil
+        systems = {}, -- name -> { Start=fn, Stop=fn, Hotkey=fn? }
+        modeIndex = 1, -- 1=Yaw-Level, 2=180 Inverted, 3=Vertical
+        modeNames = {
+            'Straightener (Yaw-Level)',
+            'Straightened 180 (Inverted)',
+            'Straightened (Vertical)',
+        },
+        collisionOn = true,
+        currentCarMode = nil, -- Enum.KeyCode of last CarMode key (Z/F/H)
+        lastVehicle = nil, -- NEW: remembers last detected/controlled vehicle
+    }
+
+    ---------------------------------
+    -- Vehicle Identification Utils --
+    ---------------------------------
+    local VehicleIdentifiers = {
+        { 'Seat', 'Plastics' },
+        { 'lights2', 'lights3' },
+    }
+
+    local function GetClosestVehicle()
+        local origin
+        local const = WS:FindFirstChild('Const')
+        if
+            const
+            and const:FindFirstChild('Ignore')
+            and const.Ignore:FindFirstChild('LocalCharacter')
+        then
+            local lc = const.Ignore.LocalCharacter
+            if lc:FindFirstChild('Middle') then
+                origin = lc.Middle.Position
+            end
+        end
+        origin = origin or Camera.CFrame.Position
+
+        local closest, minDist = nil, math.huge
+        for _, model in ipairs(WS:GetChildren()) do
+            if model:IsA('Model') then
+                for _, ids in ipairs(VehicleIdentifiers) do
+                    local ok = true
+                    for _, n in ipairs(ids) do
+                        if not model:FindFirstChild(n) then
+                            ok = false
+                            break
+                        end
+                    end
+                    if ok then
+                        local ref = model:FindFirstChild(ids[1])
+                        if ref and ref:IsA('BasePart') then
+                            local d = (ref.Position - origin).Magnitude
+                            if d < minDist then
+                                closest, minDist = model, d
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        if closest and not closest.PrimaryPart then
+            closest.PrimaryPart = closest:FindFirstChild('Seat')
+                or closest:FindFirstChild('lights2')
+                or closest:FindFirstChildOfClass('Part')
+                or closest:FindFirstChildOfClass('MeshPart')
+        end
+        return closest
+    end
+
+    -- NEW: get all vehicles (no distance logic)
+    local function GetAllVehicles()
+        local results = {}
+        for _, model in ipairs(WS:GetChildren()) do
+            if model:IsA('Model') then
+                for _, ids in ipairs(VehicleIdentifiers) do
+                    local ok = true
+                    for _, n in ipairs(ids) do
+                        if not model:FindFirstChild(n) then
+                            ok = false
+                            break
+                        end
+                    end
+                    if ok then
+                        if not model.PrimaryPart then
+                            model.PrimaryPart = model:FindFirstChild('Seat')
+                                or model:FindFirstChild('lights2')
+                                or model:FindFirstChildOfClass('Part')
+                                or model:FindFirstChildOfClass('MeshPart')
+                        end
+                        table.insert(results, model)
+                        break
+                    end
+                end
+            end
+        end
+        return results
+    end
+
+    local function SetCollisionForModel(vehicle, state)
+        if not vehicle then
+            return
+        end
+        for _, p in ipairs(vehicle:GetDescendants()) do
+            if p:IsA('BasePart') then
+                p.CanCollide = state
+            end
+        end
+    end
+
+    local function SetCollisionForAll(state)
+        for _, v in ipairs(GetAllVehicles()) do
+            SetCollisionForModel(v, state)
+        end
+    end
+
+    -- UPDATED: no distance check, uses lastVehicle if available; otherwise all
+    local function ToggleCollision()
+        Payload0Control.collisionOn = not Payload0Control.collisionOn
+        local v = Payload0Control.lastVehicle
+        if v and v.Parent then
+            SetCollisionForModel(v, Payload0Control.collisionOn)
+        else
+            SetCollisionForAll(Payload0Control.collisionOn)
+        end
+    end
+
+    ----------------------
+    -- Priority Manager --
+    ----------------------
+    local function Activate(name)
+        if Payload0Control.active == name then
+            return
+        end
+        local current = Payload0Control.active
+        if
+            current
+            and Payload0Control.systems[current]
+            and Payload0Control.systems[current].Stop
+        then
+            Payload0Control.systems[current].Stop()
+        end
+        Payload0Control.active = name
+        if
+            name
+            and Payload0Control.systems[name]
+            and Payload0Control.systems[name].Start
+        then
+            Payload0Control.systems[name].Start()
+        end
+    end
+
+    -----------------
+    -- Global Keys --
+    -----------------
+    local inputBeganConnection = UIS.InputBegan:Connect(function(input, gpe)
+        if gpe then
+            return
+        end
+
+        -- EliteHover (King priority)
+        if input.KeyCode == Enum.KeyCode.Y then
+            if Payload0Control.active == 'EliteHover' then
+                Activate(nil)
+            else
+                Activate('EliteHover')
+            end
+            return
+        end
+
+        -- CarModes (Secondary priority)
+        if
+            input.KeyCode == Enum.KeyCode.Z
+            or input.KeyCode == Enum.KeyCode.F
+            or input.KeyCode == Enum.KeyCode.H
+        then
+            Payload0Control.currentCarMode = input.KeyCode
+            if Payload0Control.active ~= 'CarModes' then
+                Activate('CarModes')
+            end
+            local sys = Payload0Control.systems['CarModes']
+            if sys and sys.Hotkey then
+                sys.Hotkey(input.KeyCode)
+            end
+            return
+        end
+
+        -- Utilities
+        if input.KeyCode == Enum.KeyCode.J then
+            -- Straightener cycling allowed only in EliteHover OR F-mode within CarModes
+            if
+                Payload0Control.active == 'CarModes'
+                and Payload0Control.currentCarMode ~= Enum.KeyCode.F
+            then
+                return
+            end
+            if
+                Payload0Control.active ~= 'EliteHover'
+                and Payload0Control.active ~= 'CarModes'
+            then
+                return
+            end
+            Payload0Control.modeIndex = Payload0Control.modeIndex + 1
+            if Payload0Control.modeIndex > 3 then
+                Payload0Control.modeIndex = 1
+            end
+            return
+        elseif input.KeyCode == Enum.KeyCode.T then
+            -- T locked during EliteHover (unchanged)
+            if Payload0Control.active == 'EliteHover' then
+                return
+            end
+            ToggleCollision()
+            return
+        end
+    end)
+
+    --// ====================================================================
+    --//  PAYLOAD0 • MAINHOVER (Main Priority Module)
+    --//  Physics-based, terrain-aware hover with smooth inertial handling.
+    --//  Forces collision ON when activated; HUD kept minimal & silent.
+    --// ====================================================================
+    do
+        -- RenderStepped micro-hub (deterministic, silent)
+        local cheat = { connections = { renderstepped = {} } }
+        local renderHubConnection = RunService.RenderStepped:Connect(function(dt)
+            for _, f in pairs(cheat.connections.renderstepped) do
+                f(dt)
+            end
+        end)
+        cheat.utility = {}
+        function cheat.utility.new_renderstepped(f)
+            cheat.connections.renderstepped[f] = f
+            return {
+                Disconnect = function()
+                    cheat.connections.renderstepped[f] = nil
+                end,
+            }
+        end
+
+        local function Payload0_EliteHover()
+            local flyConn, car, middle
+            local active = false
+            local currentVelocity = Vector3.zero
+            local lastSpeedRatio = 0
+            local verticalInertia = 0
+            local lastLook = Camera.CFrame.LookVector
+            local lastYawRight = 0
+
+            local C = {
+                speed = 285, -- Original 340
+                upspeed = 15,
+                descendKey = Enum.KeyCode.LeftShift,
+                descendSpeed = 300,
+                smoothStopRate = 6.5,
+                horizontalAccel = 14,
+                maxPitch = math.rad(60),
+
+                minHeightAboveTerrain = 5,
+                groundEffectRange = 10,
+                groundEffectGain = 0.08,
+
+                raycastSpread = math.rad(30),
+                raycastCount = 5,
+                nearPredict = 20,
+                farPredict = 35,
+                terrainResponseBoost = 2.0,
+                terrainResponseSmooth = 0.6,
+                climbSlopeScale = 0.6,
+
+                verticalResponsiveness = 12,
+                gravityBias = 0.12,
+
+                bankMaxAngle = math.rad(10),
+                bankSmoothing = 10,
+            }
+
+            local function getMiddle()
+                local ok, r = pcall(function()
+                    return WS:WaitForChild('Const', 2)
+                        :WaitForChild('Ignore', 2)
+                        :WaitForChild('LocalCharacter', 2)
+                        :WaitForChild('Middle', 2)
+                end)
+                return ok and r or nil
+            end
+
+            local function resetState()
+                currentVelocity = Vector3.zero
+                verticalInertia = 0
+                lastSpeedRatio = 0
+                car, middle = nil, nil
+            end
+
+            local function findNearestCar()
+                car = GetClosestVehicle()
+                if car then
+                    Payload0Control.lastVehicle = car -- remember
+                end
+            end
+
+            local function terrainYAt(pos)
+                local params = RaycastParams.new()
+                params.FilterType = Enum.RaycastFilterType.Whitelist
+                params.FilterDescendantsInstances = { WS.Terrain }
+                params.IgnoreWater = true
+
+                local res = WS:Raycast(
+                    pos + Vector3.new(0, 150, 0),
+                    Vector3.new(0, -400, 0),
+                    params
+                )
+                if not res or res.Normal.Y < 0.45 then
+                    return nil
+                end
+                return res.Position.Y
+            end
+
+            local function getTerrainProfile(pos, look, right)
+                local profile = { heights = {}, maxHeight = nil, slopeFactor = 0 }
+                local params = RaycastParams.new()
+                params.FilterType = Enum.RaycastFilterType.Whitelist
+                params.FilterDescendantsInstances = { WS.Terrain }
+                params.IgnoreWater = true
+
+                local angles = {}
+                for i = 1, C.raycastCount do
+                    local t = (i - 1) / (C.raycastCount - 1) - 0.5
+                    angles[i] = t * C.raycastSpread
+                end
+
+                local totalWeight, weightedHeight = 0, 0
+                for _, a in ipairs(angles) do
+                    local dir = CFrame.Angles(0, a, 0) * look
+                    local nearPos = pos + dir * C.nearPredict
+                    local farPos = pos + dir * C.farPredict
+
+                    local nearRes = WS:Raycast(
+                        nearPos + Vector3.new(0, 150, 0),
+                        Vector3.new(0, -400, 0),
+                        params
+                    )
+                    if nearRes and nearRes.Normal.Y >= 0.45 then
+                        local w = 1 - math.abs(a) / C.raycastSpread
+                        weightedHeight = weightedHeight
+                            + nearRes.Position.Y * (w * 0.6)
+                        totalWeight = totalWeight + (w * 0.6)
+                    end
+
+                    local farRes = WS:Raycast(
+                        farPos + Vector3.new(0, 150, 0),
+                        Vector3.new(0, -400, 0),
+                        params
+                    )
+                    if farRes and farRes.Normal.Y >= 0.45 then
+                        local w = 1 - math.abs(a) / C.raycastSpread
+                        weightedHeight = weightedHeight
+                            + farRes.Position.Y * (w * 0.4)
+                        totalWeight = totalWeight + (w * 0.4)
+                    end
+                end
+
+                if totalWeight > 0 then
+                    profile.maxHeight = weightedHeight / totalWeight
+                end
+
+                local centerFar = terrainYAt(pos + look * C.farPredict)
+                if centerFar and totalWeight > 0 then
+                    profile.slopeFactor =
+                        math.clamp((centerFar - pos.Y) / C.farPredict, 0, 2)
+                end
+
+                return profile
+            end
+
+            -- (Silent HUD removed by default)
+            local function flyStep(dt)
+                if not active then
+                    return
+                end
+                middle = middle or getMiddle()
+                if not middle then
+                    return
+                end
+
+                if not car or not car.PrimaryPart then
+                    findNearestCar()
+                    if not
+                    car or not car.PrimaryPart then
+                        return
+                    end
+                end
+
+                -- Anchor during hover to ensure crisp kinematics and safety
+                for _, p in ipairs(car:GetDescendants()) do
+                    if p:IsA('BasePart') then
+                        p.Anchored = true
+                    end
+                end
+
+                local camCF = Camera.CFrame
+                local look = camCF.LookVector
+                local dir = Vector3.zero
+
+                if UIS:IsKeyDown(Enum.KeyCode.W) then
+                    dir += look
+                end
+                if UIS:IsKeyDown(Enum.KeyCode.S) then
+                    dir -= look
+                end
+                if UIS:IsKeyDown(Enum.KeyCode.D) then
+                    dir += camCF.RightVector
+                end
+                if UIS:IsKeyDown(Enum.KeyCode.A) then
+                    dir -= camCF.RightVector
+                end
+
+                local pitch = math.asin(math.clamp(look.Y, -1, 1))
+                local verticalVel = math.clamp(pitch / C.maxPitch, -1, 1)
+                    * C.upspeed
+                if UIS:IsKeyDown(C.descendKey) then
+                    verticalVel = -C.descendSpeed
+                end
+
+                local targetVelocity =
+                    Vector3.new(dir.X * C.speed, verticalVel, dir.Z * C.speed)
+                local lerpRate = (
+                    dir.Magnitude > 0 and C.horizontalAccel or C.smoothStopRate
+                )
+                currentVelocity = currentVelocity:Lerp(
+                    targetVelocity,
+                    math.clamp(dt * lerpRate, 0, 1)
+                )
+
+                local curCF = car:GetPrimaryPartCFrame()
+                local pos = curCF.Position
+                local newPos = pos + currentVelocity * dt
+
+                local terrainY_now = terrainYAt(pos)
+                if terrainY_now then
+                    local minY = terrainY_now + C.minHeightAboveTerrain
+                    if newPos.Y < minY then
+                        newPos = Vector3.new(newPos.X, minY, newPos.Z)
+                        verticalInertia = math.min(verticalInertia, 0)
+                    end
+                end
+
+                -- Advanced uphill-only climb blending
+                local horizSpeed =
+                    Vector3.new(currentVelocity.X, 0, currentVelocity.Z).Magnitude
+                local speedRatio = math.clamp(horizSpeed / C.speed, 0, 1)
+                lastSpeedRatio = lastSpeedRatio
+                    + (speedRatio - lastSpeedRatio) * math.clamp(dt * 6, 0, 1)
+
+                local terrainProfile =
+                    getTerrainProfile(pos, look, curCF.RightVector)
+                local blendY = terrainProfile.maxHeight
+                local slopeFactor = terrainProfile.slopeFactor
+
+                if blendY and blendY > pos.Y and lastSpeedRatio > 0.05 then
+                    local terrainDelta = blendY - pos.Y
+                    local targetClearance = C.minHeightAboveTerrain + 1.0
+                    local heightError = math.clamp(
+                        (terrainDelta - targetClearance) / targetClearance,
+                        0,
+                        1
+                    )
+                    local climb = terrainDelta
+                        * dt
+                        * C.terrainResponseBoost
+                        * (lastSpeedRatio ^ C.terrainResponseSmooth)
+                        * (1.0 + slopeFactor * C.climbSlopeScale)
+                        * heightError
+
+                    verticalInertia = verticalInertia
+                        + climb * C.verticalResponsiveness
+                    local vLimit = math.max(6, horizSpeed * 8)
+                    verticalInertia = math.clamp(verticalInertia, 0, vLimit)
+                end
+
+                -- Gravity bias + ground effect
+                local grav = WS.Gravity or 196.2
+                verticalInertia = verticalInertia
+                    + (grav * C.gravityBias * dt * 0.001)
+
+                if terrainY_now then
+                    local height = newPos.Y - terrainY_now
+                    if height < C.groundEffectRange then
+                        local nearness =
+                            math.clamp(1 - (height / C.groundEffectRange), 0, 1)
+                        verticalInertia = verticalInertia
+                            + nearness * C.groundEffectGain
+                    end
+                end
+
+                newPos = newPos + Vector3.new(0, verticalInertia * dt, 0)
+                verticalInertia = verticalInertia
+                    * (1 - math.clamp(dt * 2.0, 0, 0.2))
+
+                -- Subtle banking from camera turn rate
+                local right = curCF.RightVector
+                local turnRate = (right:Dot((look - lastLook) / math.max(dt, 1e-4)))
+                lastLook = look
+                lastYawRight = lastYawRight
+                    + (turnRate - lastYawRight)
+                        * math.clamp(dt * C.bankSmoothing, 0, 1)
+                local bankAngle = math.clamp(-lastYawRight, -1, 1) * C.bankMaxAngle
+
+                local forward = (newPos + look) - newPos
+                local base = CFrame.lookAt(newPos, newPos + forward, Vector3.yAxis)
+                local banked = base * CFrame.Angles(0, 0, bankAngle)
+
+                car:SetPrimaryPartCFrame(banked)
+            end
+
+            local function Start()
+                active = true
+                resetState()
+                middle = getMiddle()
+                findNearestCar()
+
+                -- Force collision ON on activation
+                Payload0Control.collisionOn = true
+                if Payload0Control.lastVehicle then
+                    SetCollisionForModel(
+                        Payload0Control.lastVehicle,
+                        true
+                    )
+                else
+                    local c = GetClosestVehicle()
+                    if c then
+                        Payload0Control.lastVehicle = c
+                        SetCollisionForModel(c, true)
+                    end
+                end
+
+                if not flyConn then
+                    flyConn = cheat.utility.new_renderstepped(LPH_JIT_MAX(flyStep))
+                end
+                -- (HUD intentionally silent)
+            end
+
+            local function Stop()
+                active = false
+                if flyConn then
+                    flyConn:Disconnect()
+                    flyConn = nil
+                end
+                if car and car.PrimaryPart then
+                    for _, p in ipairs(car:GetDescendants()) do
+                        if p:IsA('BasePart') then
+                            p.Anchored = false
+                            p.AssemblyLinearVelocity = Vector3.zero
+                            p.AssemblyAngularVelocity = Vector3.zero
+                        end
+                    end
+                end
+            end
+
+            return { Start = Start, Stop = Stop }
+        end
+
+        Payload0Control.systems['EliteHover'] = Payload0_EliteHover()
+    end
+
+    --// ====================================================================
+    --//  PAYLOAD0 • CARMODECONFIG (Secondary Priority)
+    --//  Z/F/H speed modes with F-only straightener; Ctrl-hold for Z/H temp.
+    --//  Includes Q/R yaw rotate (±1° per frame) and wheel no-collision.
+    --// ====================================================================
+    do
+        local Control = Payload0Control
+        local RS, UIS, WS = RunService, UserInputService, Workspace
+        local Camera = Workspace.CurrentCamera
+
+        local function CarModeSystem()
+            local active = false
+            local connections = {}
+            local orientConn = nil
+            local currentSpeed = 0
+            local flyObjects = {}
+            local rotateSpeed = math.rad(1) -- Q/R per-frame yaw rate
+
+            -- CarMode setup
+            local CarModeConfig = {
+                { Name = 'CarMode1', Key = Enum.KeyCode.Z, Speed = 60 },
+                { Name = 'CarMode2', Key = Enum.KeyCode.F, Speed = 15 },
+                { Name = 'CarMode3', Key = Enum.KeyCode.H, Speed = 300 },
+            }
+
+            local CarModes = {}
+            for _, e in ipairs(CarModeConfig) do
+                CarModes[e.Name] = { Key = e.Key, Speed = e.Speed, Active = false }
+            end
+
+            -- Detection criteria
+            local criteriaList = {
+                {
+                    partName = 'BLWheelHub',
+                    partSize = Vector3.new(0.25, 0.25, 0.25),
+                },
+                {
+                    partName = 'lights1',
+                    partSize = Vector3.new(
+                        3.0251893997192383,
+                        0.6689038276672363,
+                        5.577791213989258
+                    ),
+                },
+                {
+                    partName = 'lights3',
+                    partSize = Vector3.new(
+                        0.42277026176452637,
+                        0.6625227928161621,
+                        0.07328414916992188
+                    ),
+                },
+                {
+                    partName = 'lights2',
+                    partSize = Vector3.new(
+                        0.42277026176452637,
+                        0.6625227928161621,
+                        0.07328414916992188
+                    ),
+                },
+                {
+                    partName = 'FRWheel',
+                    partSize = Vector3.new(
+                        2.4000000953674316,
+                        2.4000000953674316,
+                        0.7129999995231628
+                    ),
+                },
+                {
+                    partName = 'FLWheel',
+                    partSize = Vector3.new(
+                        2.4000000953674316,
+                        2.4000000953674316,
+                        0.7129999995231628
+                    ),
+                },
+                {
+                    partName = 'Body',
+                    partSize = Vector3.new(
+                        6.795680046081543,
+                        5.078634262084961,
+                        13.125102996826172
+                    ),
+                },
+                {
+                    partName = 'BRWheel',
+                    partSize = Vector3.new(
+                        2.4000000953674316,
+                        2.4000000953674316,
+                        0.7129999995231628
+                    ),
+                },
+                {
+                    partName = 'BLWheel',
+                    partSize = Vector3.new(
+                        2.4000000953674316,
+                        2.4000000953674316,
+                        0.7129999995231628
+                    ),
+                },
+            }
+
+            local function isMatchingSize(a, b, t)
+                t = t or 0.001
+                return math.abs(a.X - b.X) <= t
+                    and math.abs(a.Y - b.Y) <= t
+                    and math.abs(a.Z - b.Z) <= t
+            end
+
+            local function matchesCriteria(part)
+                if not part:IsA('BasePart') then
+                    return false
+                end
+                for _, c in ipairs(criteriaList) do
+                    if
+                        part.Name == c.partName
+                        and isMatchingSize(part.Size, c.partSize)
+                    then
+                        return true
+                    end
+                end
+                return false
+            end
+
+            -- Orientation (straightener)
+            local function YawOnlyCFrame(pos, look)
+                local flat = Vector3.new(look.X, 0, look.Z)
+                flat = (flat.Magnitude < 1e-3) and Vector3.new(0, 0, -1)
+                    or flat.Unit
+                return CFrame.lookAt(pos, pos + flat, Vector3.yAxis)
+            end
+
+            local function BuildCFrameForMode(pos)
+                if Control.modeIndex == 2 then
+                    local cf = CFrame.lookAt(
+                        pos,
+                        pos + Vector3.new(0, -1, 0),
+                        Vector3.zAxis
+                    )
+                    return cf * CFrame.Angles(math.rad(-10), 0, math.rad(180))
+                elseif Control.modeIndex == 3 then
+                    local cf = CFrame.lookAt(
+                        pos,
+                        pos + Vector3.new(0, 1, 0),
+                        Vector3.zAxis
+                    )
+                    return cf * CFrame.Angles(math.rad(-10), 0, 0)
+                end
+                return nil -- mode 1 handled by yaw-level blend
+            end
+
+            local function startOrientationLoop()
+                if orientConn then
+                    orientConn:Disconnect()
+                end
+                orientConn = RS.Heartbeat:Connect(function()
+                    local v = GetClosestVehicle()
+                    if not v or not v.PrimaryPart then
+                        return
+                    end
+                    -- Remember vehicle for T toggles (no distance)
+                    Payload0Control.lastVehicle = v
+
+                    local pivot = v:GetPivot()
+                    if Control.modeIndex == 1 then
+                        local flat = YawOnlyCFrame(pivot.Position, pivot.LookVector)
+                        v:PivotTo(pivot:Lerp(flat, 0.35))
+                    else
+                        local target = BuildCFrameForMode(pivot.Position)
+                        if target then
+                            v:PivotTo(pivot:Lerp(target, 0.3))
+                        end
+                    end
+                end)
+            end
+
+            -- Car fly + Q/R rotation
+            local function controlFly(part, speed)
+                local dir = Vector3.zero
+                local rotateCFrame = CFrame.new()
+
+                if not UIS:GetFocusedTextBox() then
+                    if UIS:IsKeyDown(Enum.KeyCode.W) then
+                        dir += Camera.CFrame.LookVector
+                    end
+                    if UIS:IsKeyDown(Enum.KeyCode.S) then
+                        dir -= Camera.CFrame.LookVector
+                    end
+                    if UIS:IsKeyDown(Enum.KeyCode.D) then
+                        dir += Camera.CFrame.RightVector
+                    end
+                    if UIS:IsKeyDown(Enum.KeyCode.A) then
+                        dir -= Camera.CFrame.RightVector
+                    end
+
+                    -- Q/R live yaw
+                    if UIS:IsKeyDown(Enum.KeyCode.R) then
+                        rotateCFrame = rotateCFrame
+                            * CFrame.Angles(0, -rotateSpeed, 0)
+                    end
+                    if UIS:IsKeyDown(Enum.KeyCode.Q) then
+                        rotateCFrame = rotateCFrame
+                            * CFrame.Angles(0, rotateSpeed, 0)
+                    end
+
+                    part.CFrame = part.CFrame * rotateCFrame
+                else
+                    part.Velocity = Vector3.zero
+                    part.RotVelocity = Vector3.zero
+                end
+
+                part.Velocity = dir * speed
+            end
+
+            -- Wheel no-collision enforcement
+            local function setNoCollideIfWheel(p)
+                if not p:IsA('BasePart') then
+                    return
+                end
+                local n = p.Name
+                if
+                    n == 'BLWheel'
+                    or n == 'BRWheel'
+                    or n == 'FLWheel'
+                    or n == 'FRWheel'
+                    or n == 'BLWheelHub'
+                then
+                    p.CanCollide = false
+                end
+            end
+
+            local descendantAddedConnection = workspace.DescendantAdded:Connect(function(d)
+                if matchesCriteria(d) then
+                    table.insert(flyObjects, d)
+                    if d:IsA('BasePart') then
+                        setNoCollideIfWheel(d)
+                    end
+                end
+            end)
+
+            local descendantRemovingConnection = workspace.DescendantRemoving:Connect(function(d)
+                for i, obj in ipairs(flyObjects) do
+                    if obj == d then
+                        table.remove(flyObjects, i)
+                        break
+                    end
+                end
+            end)
+
+            local wheelNoCollideConnection = RS.Heartbeat:Connect(function()
+                for _, obj in ipairs(flyObjects) do
+                    setNoCollideIfWheel(obj)
+                end
+            end)
+
+            for _, d in ipairs(workspace:GetDescendants()) do
+                if matchesCriteria(d) then
+                    table.insert(flyObjects, d)
+                    if d:IsA('BasePart') then
+                        setNoCollideIfWheel(d)
+                    end
+                end
+            end
+
+            -- Mode activator
+            local function toggleCarMode(name)
+                local mode = CarModes[name]
+                local togglingOff = mode.Active
+
+                -- stop previous
+                for _, m in pairs(CarModes) do
+                    m.Active = false
+                end
+                for _, c in ipairs(connections) do
+                    c:Disconnect()
+                end
+                connections = {}
+
+                if togglingOff then
+                    if orientConn then
+                        orientConn:Disconnect()
+                        orientConn = nil
+                    end
+                    return
+                end
+
+                mode.Active = true
+                currentSpeed = mode.Speed
+                Control.currentCarMode = mode.Key
+
+                -- Straightener permission
+                local ctrlHeld = UIS:IsKeyDown(Enum.KeyCode.LeftControl)
+                    or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+                if mode.Key == Enum.KeyCode.F then
+                    startOrientationLoop() -- always ON in F
+                elseif ctrlHeld then
+                    startOrientationLoop() -- temporary for Z/H while Ctrl held
+                    task.defer(function()
+                        repeat
+                            task.wait()
+                        until not (
+                                UIS:IsKeyDown(Enum.KeyCode.LeftControl)
+                                or UIS:IsKeyDown(Enum.KeyCode.RightControl)
+                            )
+                        if orientConn then
+                            orientConn:Disconnect()
+                            orientConn = nil
+                        end
+                    end)
+                else
+                    if orientConn then
+                        orientConn:Disconnect()
+                        orientConn = nil
+                    end
+                end
+
+                -- Drive matched objects
+                for _, obj in ipairs(flyObjects) do
+                    if obj:IsA('BasePart') then
+                        obj.Anchored = false
+                    end
+                    local conn = RS.Heartbeat:Connect(function()
+                        controlFly(obj, currentSpeed)
+                    end)
+                    table.insert(connections, conn)
+                end
+            end
+
+            -- Lifecycle
+            local function Start()
+                active = true
+            end
+
+            local function Stop()
+                active = false
+                for _, c in ipairs(connections) do
+                    c:Disconnect()
+                end
+                connections = {}
+                if orientConn then
+                    orientConn:Disconnect()
+                    orientConn = nil
+                end
+            end
+
+            -- Hotkey bridge
+            local function Hotkey(key)
+                for name, data in pairs(CarModes) do
+                    if data.Key == key then
+                        toggleCarMode(name)
+                        break
+                    end
+                end
+            end
+
+            return { Start = Start, Stop = Stop, Hotkey = Hotkey }
+        end
+
+        Payload0Control.systems['CarModes'] = CarModeSystem()
+    end
+
+    -- ===== CLEANUP =====
+    local cleanupConnection = game:GetService("Players").PlayerRemoving:Connect(function(player)
+        if player == LocalPlayer then
+            -- Disconnect all major connections
+            if inputBeganConnection then inputBeganConnection:Disconnect() end
+            if renderHubConnection then renderHubConnection:Disconnect() end
+            
+            -- Stop active systems
+            if Payload0Control.active and Payload0Control.systems[Payload0Control.active] then
+                Payload0Control.systems[Payload0Control.active].Stop()
+            end
+            
+            -- Force collision back on for all vehicles
+            SetCollisionForAll(true)
+        end
+    end)
+
+end)
+
+
+
+
+task.spawn(function() -- << ISOLATED SPEEDBOAT SYSTEM >>
+
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+    local Camera = Workspace.CurrentCamera
+    local LocalPlayer = Players.LocalPlayer
+
+    -- ===== UI =====
+    local boatflyText = Drawing and Drawing.new and Drawing.new("Text") or nil
+    local uiConnection
+    if boatflyText then
+        boatflyText.Color = Color3.fromRGB(255,160,40)
+        boatflyText.Text = "BoatFly"
+        boatflyText.Size = 25
+        boatflyText.Outline = true
+        boatflyText.Center = false
+        boatflyText.Visible = false
+        uiConnection = RunService.RenderStepped:Connect(function()
+            local vs = Camera.ViewportSize
+            boatflyText.Position = Vector2.new(vs.X - 100, 160)
+        end)
+    end
+
+    -- ===== CONFIG =====
+    local CFG = {
+        Speed               = 420,                    -- constant travel speed (boosted)
+        ReacquireDist       = 60,                     -- reacquire or stop when far
+        ActivationDist      = 10,                     -- ✅ must be this close to toggle
+        UseYawUpright       = true,
+        TurnRate            = math.rad(2.6),          -- smooth yaw rotation
+        PreferLVWhenSeated  = true,
+    }
+
+    -- ===== STATE =====
+    local isFlying = false
+    local boatModel, hull, middle
+    local input = {}
+    local currentVel = Vector3.zero
+    local BoatIdentifiers = { {"Hull","Metal"} }
+
+    -- ===== HELPERS =====
+    local function setVisible(v)
+        if boatflyText then boatflyText.Visible = v end
+    end
+
+    local function getLV()
+        if not (CFG.PreferLVWhenSeated and boatModel and boatModel.PrimaryPart) then return nil end
+        return (boatModel.PrimaryPart.LinearVelocity or boatModel.PrimaryPart:FindFirstChildOfClass("LinearVelocity"))
+    end
+
+    local function stopMotion()
+        currentVel = Vector3.zero
+        local lv = getLV()
+        if lv then
+            pcall(function()
+                lv.VectorVelocity = Vector3.zero
+                lv.Enabled = false
+            end)
+        end
+        if hull then
+            pcall(function()
+                hull.AssemblyLinearVelocity = Vector3.zero
+                hull.Velocity = Vector3.zero
+                hull.AssemblyAngularVelocity = Vector3.zero
+                hull.RotVelocity = Vector3.zero
+            end)
+        end
+    end
+
+    local function getMiddle()
+        local ok, res = pcall(function()
+            return Workspace:WaitForChild("Const",1)
+                :WaitForChild("Ignore",1)
+                :WaitForChild("LocalCharacter",1)
+                :WaitForChild("Middle",1)
+        end)
+        return ok and res or nil
+    end
+
+    local function findNearestBoat(origin: Vector3)
+        local best, bestDist = nil, math.huge
+        for _,model in ipairs(Workspace:GetChildren()) do
+            if model:IsA("Model") then
+                for _,group in ipairs(BoatIdentifiers) do
+                    local okAll = true
+                    for _,name in ipairs(group) do
+                        if not model:FindFirstChild(name) then okAll = false break end
+                    end
+                    if okAll then
+                        local ref = model:FindFirstChild(group[1])
+                        if ref and ref:IsA("BasePart") then
+                            local d = (ref.Position - origin).Magnitude
+                            if d < bestDist then best, bestDist = model, d end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        return best, bestDist
+    end
+
+    local function ensurePrimaryPart(m)
+        if not (m and m:IsA("Model")) then return end
+        if not m.PrimaryPart then
+            local h = m:FindFirstChild("Hull")
+            if h and h:IsA("BasePart") then
+                pcall(function() m.PrimaryPart = h end)
+            else
+                for _,d in ipairs(m:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        pcall(function() m.PrimaryPart = d end)
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- ===== INPUT =====
+    local inputBeganConnection = UserInputService.InputBegan:Connect(function(io,gpe)
+        if gpe then return end
+        if io.KeyCode then
+            input[io.KeyCode] = true
+            if io.KeyCode == Enum.KeyCode.V then
+                middle = middle or getMiddle()
+                local origin = (middle and middle.Position) or Camera.CFrame.Position
+                local nearest, dist = findNearestBoat(origin)
+                local hullPart = nearest and nearest:FindFirstChild("Hull")
+
+                -- ✅ guard: only allow toggle if very close to nearest Hull
+                if not (hullPart and dist <= CFG.ActivationDist) then
+                    return -- ignore key press completely
+                end
+
+                boatModel, hull = nearest, hullPart
+                ensurePrimaryPart(boatModel)
+                isFlying = not isFlying
+                setVisible(isFlying)
+                warn("BoatFly: "..(isFlying and "ENABLED" or "DISABLED"))
+                if not isFlying then stopMotion() end
+            end
+        end
+    end)
+
+    local inputEndedConnection = UserInputService.InputEnded:Connect(function(io,gpe)
+        if gpe then return end
+        if io.KeyCode then input[io.KeyCode] = false end
+    end)
+
+    -- ===== MAIN LOOP =====
+    local mainLoopConnection = RunService.RenderStepped:Connect(function(dt)
+        -- MASTER GUARD: text visibility dictates power
+        if not (boatflyText and boatflyText.Visible) then
+            if hull then stopMotion() end
+            return
+        end
+
+        middle = middle or getMiddle()
+        local origin = (middle and middle.Position) or Camera.CFrame.Position
+
+        -- reacquire only the closest Hull boat
+        local nearest, dist = findNearestBoat(origin)
+        if (not nearest) or (not hull) or (dist > CFG.ReacquireDist) then
+            isFlying = false
+            setVisible(false)
+            stopMotion()
+            return
+        end
+        boatModel = nearest
+        hull = boatModel:FindFirstChild("Hull")
+        ensurePrimaryPart(boatModel)
+
+        pcall(function()
+            if boatModel.PrimaryPart then boatModel.PrimaryPart:SetNetworkOwner(LocalPlayer) end
+            hull:SetNetworkOwner(LocalPlayer)
+            local seat = boatModel:FindFirstChildWhichIsA("Seat", true)
+            if seat then seat:SetNetworkOwner(LocalPlayer) end
+        end)
+
+        -- Self-oriented axes
+        local forward = -hull.CFrame.LookVector
+
+        -- Smooth steering (A/D swapped)
+        local turnInput = 0
+        if input[Enum.KeyCode.A] then turnInput = 1 end
+        if input[Enum.KeyCode.D] then turnInput = -1 end
+        if turnInput ~= 0 then
+            hull.CFrame = hull.CFrame * CFrame.Angles(0, turnInput * CFG.TurnRate, 0)
+        end
+
+        -- Movement keys
+        local move = Vector3.zero
+        if input[Enum.KeyCode.W] then move += forward end
+        if input[Enum.KeyCode.S] then move -= forward end
+
+        -- Apply constant velocity
+        if move.Magnitude > 0 then
+            currentVel = move.Unit * CFG.Speed
+        else
+            currentVel = Vector3.zero
+        end
+
+        local lv = getLV()
+        if lv then
+            pcall(function()
+                if currentVel.Magnitude > 0 then
+                    if lv.MaxForce and typeof(lv.MaxForce) == "number" then lv.MaxForce = math.huge end
+                    if lv.MaxVectorForce and typeof(lv.MaxVectorForce) == "Vector3" then
+                        lv.MaxVectorForce = Vector3.new(math.huge, math.huge, math.huge)
+                    end
+                    lv.VectorVelocity = currentVel
+                    lv.Enabled = true
+                else
+                    lv.VectorVelocity = Vector3.zero
+                    lv.Enabled = false
+                end
+            end)
+        end
+
+        hull.Anchored = false
+        hull.AssemblyLinearVelocity = currentVel
+        hull.Velocity = currentVel
+        hull.AssemblyAngularVelocity = Vector3.zero
+        hull.RotVelocity = Vector3.zero
+
+        if CFG.UseYawUpright then
+            local pos = hull.Position
+            local _, y, _ = hull.CFrame:ToOrientation()
+            hull.CFrame = CFrame.new(pos) * CFrame.Angles(0, y, 0)
+        end
+    end)
+
+    -- ===== CLEANUP =====
+    game:GetService("Players").PlayerRemoving:Connect(function(player)
+        if player == LocalPlayer then
+            if uiConnection then uiConnection:Disconnect() end
+            if inputBeganConnection then inputBeganConnection:Disconnect() end
+            if inputEndedConnection then inputEndedConnection:Disconnect() end
+            if mainLoopConnection then mainLoopConnection:Disconnect() end
+            if boatflyText then boatflyText:Remove() end
+            stopMotion()
+        end
+    end)
+
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Fixed Bhop (Old version broke)
+task.spawn(function() -- << FULLY ISOLATED BHOP SYSTEM >>
+
+    -- Shared config (internal only)
+    local config = {
+        bhop_enabled = true,
+        downcliff_mode = false,
+        bhop_silent = false
+    }
+
+    -- Exposed API (the “control interface”)
+    _G.PAYLOAD0_BHOP = {
+        setEnabled = function(v) config.bhop_enabled = v end,
+        setSilent = function(v) config.bhop_silent = v end,
+        setDowncliff = function(v) config.downcliff_mode = v end,
+        unload = function()
+            if config._conn then
+                config._conn:Disconnect()
+                config._conn = nil
+            end
+        end
+    }
+
+    -------------------------------------------------------------------------
+    -- Internal BHOP System (entire logic contained inside the spawned thread)
+    -------------------------------------------------------------------------
+
+    -- Services
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local Workspace = game:GetService("Workspace")
+    local Camera = Workspace.CurrentCamera or Workspace:WaitForChild("CurrentCamera")
+
+    -- Character Parts
+    local const = Workspace:WaitForChild("Const")
+    local ignore = const:WaitForChild("Ignore")
+    local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+    local middle = LocalCharacter:WaitForChild("Middle")
+    local bottom = LocalCharacter:WaitForChild("Bottom")
+    local top = LocalCharacter:WaitForChild("Top")
+
+    -- Constants
+    local SPEED = 70
+    local MIN_SPEED = 17
+
+    -- Internal state
+    local currentSpeed = SPEED
+    local wtf = 0
+    local firstActivated = false
+
+    -- Micro-optimizations
+    local _IsKeyDown = UserInputService.IsKeyDown
+    local _Vector3_new = Vector3.new
+    local Y_AXIS = Vector3.yAxis
+
+    -- Raycast params
+    local rcParams = RaycastParams.new()
+    rcParams.FilterType = Enum.RaycastFilterType.Exclude
+    rcParams.FilterDescendantsInstances = { ignore }
+    rcParams.IgnoreWater = true
+
+    -- Helpers
+    local function cameraFlatLook()
+        local look = Camera.CFrame.LookVector
+        local flat = _Vector3_new(look.X, 0, look.Z)
+        return (flat.Magnitude == 0) and Vector3.zero or flat.Unit
+    end
+
+    local function findGroundBelow(part, maxDistance)
+        local result = Workspace:Raycast(
+            part.Position,
+            Vector3.new(0, -maxDistance, 0),
+            rcParams
+        )
+        return result and result.Position, result and result.Instance
+    end
+
+    -------------------------------------------------------------------------
+    -- Main Movement Loop
+    -------------------------------------------------------------------------
+    config._conn = RunService.RenderStepped:Connect(function(delta)
+        if config.bhop_silent then
+            currentSpeed = SPEED
+            wtf = 0
+            return
+        end
+
+        local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
+        local ckey = _IsKeyDown(UserInputService, Enum.KeyCode.C)
+
+        if not (config.bhop_enabled and not config.downcliff_mode and shift and ckey) then
+            currentSpeed = SPEED
+            wtf = 0
+            firstActivated = false
+            return
+        end
+
+        -- Initial raise
+        if not firstActivated then
+            firstActivated = true
+            task.wait(0.01)
+            local topCF, midCF, botCF = top.CFrame, middle.CFrame, bottom.CFrame
+            middle.CFrame = midCF + Y_AXIS * 6
+            bottom.CFrame = botCF + Y_AXIS * 6
+            top.CFrame = topCF + Y_AXIS * 6
+        end
+
+        local flat = cameraFlatLook()
+        local move = Vector3.zero
+
+        if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
+        if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
+        if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+        if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+        if move.Magnitude == 0 then
+            currentSpeed = SPEED
+            wtf = 0
+            return
+        end
+
+        move = move.Unit
+        currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+        -- Downcliff mode
+        if config.downcliff_mode then
+            local groundPos = findGroundBelow(middle, 12)
+            if groundPos then
+                local desired = groundPos + Vector3.new(0, 1.5, 0)
+                local topOffset = top.Position - middle.Position
+                local bottomOffset = bottom.Position - middle.Position
+
+                middle.Position = desired
+                top.Position = desired + topOffset
+                bottom.Position = desired + bottomOffset
+
+                local forward = move * math.max(currentSpeed * 0.6, MIN_SPEED)
+                middle.AssemblyLinearVelocity = forward
+                top.AssemblyLinearVelocity = forward
+                bottom.AssemblyLinearVelocity = forward
+
+                wtf += delta
+                return
+            end
+        end
+
+        local yForce = (wtf < 0.80) and 0 or -9
+        local finalVel = move * currentSpeed + Vector3.new(0, yForce, 0)
+
+        middle.AssemblyLinearVelocity = finalVel
+        top.AssemblyLinearVelocity = finalVel
+        bottom.AssemblyLinearVelocity = finalVel
+
+        wtf += delta
+    end)
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Keybind-(V)(H)(U)(B)(Bracket)
+task.spawn(function() -- << ISOLATED INVENTORY CONTROL SYSTEM >>
+
+    local UserInputService = game:GetService("UserInputService")
+    local Players = game:GetService("Players")
+
+    local player = Players.LocalPlayer
+    local remote = player:WaitForChild("TCP")  -- exact as original
+
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+
+        -- ] (RightBracket): Clean Inside Inventory
+        if input.KeyCode == Enum.KeyCode.RightBracket then
+            for i = 14, 43 do
+                remote:FireServer(7, i, false)
+            end
+
+        -- V: Loot All
+        elseif input.KeyCode == Enum.KeyCode.V then
+            for i = 1, 40 do
+                remote:FireServer(12, i, true)
+            end
+
+        -- H: Loot Weapon Ammo (118)
+        elseif input.KeyCode == Enum.KeyCode.H then
+            for i = 1, 40 do
+                remote:FireServer(14, i, true, 118)
+            end
+
+        -- U: Throw Away Everything
+        elseif input.KeyCode == Enum.KeyCode.U then
+            for i = 1, 40 do
+                remote:FireServer(7, i, true)
+            end
+
+        -- B: Put Loot Inside Box
+        elseif input.KeyCode == Enum.KeyCode.B then
+            for i = 9, 43 do
+                remote:FireServer(12, i, false)
+            end
+        end
+    end)
+
+end)
+
+
+
+task.spawn(function() -- << ISOLATED 3RD PERSON (X) SYSTEM >>
+
+    local UIS = game:GetService("UserInputService")
+    local RS = game:GetService("RunService")
+    local Camera = workspace.CurrentCamera
+
+    local enabled = false       -- (unused in original code, kept as-is)
+    local keybind = Enum.KeyCode.X
+    local speed = 190
+
+    local function updateFreecam()
+        local mv = Vector3.new()
+        local delta = UIS:GetMouseDelta()
+
+        if UIS:IsKeyDown(keybind) then
+            if UIS:IsKeyDown(Enum.KeyCode.X) then mv = mv - (Camera.CFrame.LookVector * speed) end
+            if UIS:IsKeyDown(Enum.KeyCode.X) then mv = mv - (Camera.CFrame.RightVector * speed) end
+            if UIS:IsKeyDown(Enum.KeyCode.X) then mv = mv + (Camera.CFrame.RightVector * speed) end
+            if UIS:IsKeyDown(Enum.KeyCode.X) then mv = mv + (Camera.CFrame.UpVector * speed) end
+            if UIS:IsKeyDown(Enum.KeyCode.X) then mv = mv - (Camera.CFrame.UpVector * speed) end
+
+            Camera.CFrame =
+                Camera.CFrame *
+                CFrame.Angles(-math.rad(delta.Y * 0.1), -math.rad(delta.X * 0.1), 0) +
+                mv
+        end
+    end
+
+    RS.RenderStepped:Connect(updateFreecam)
+
+end)
+
+
+
+
+task.spawn(function() -- << ISOLATED TERRAIN MODIFIER >>
+
+    --// Services
+    local Players = game:GetService("Players")
+    local UserInputService = game:GetService("UserInputService")
+    local Workspace = game:GetService("Workspace")
+
+    --// Player + Mouse
+    local LocalPlayer = Players.LocalPlayer
+    local Mouse = LocalPlayer:GetMouse()
+
+    --// Stored regions (for restoration)
+    local storedRegions = {}
+
+    --// Settings
+    local REGION_SIZE = Vector3.new(26, 18, 18)  -- editable
+    local VOXEL_RESOLUTION = 4                   -- 4x4x4 blocks
+
+    --// Delete terrain at mouse position
+    local function deleteTerrain()
+        if not Mouse.Target then return end
+
+        -- Define region around mouse hit
+        local pos = Mouse.Hit.Position
+        local region = Region3.new(
+            pos - REGION_SIZE/2,
+            pos + REGION_SIZE/2
+        )
+
+        -- Read voxel data
+        local material, occupancy = Workspace.Terrain:ReadVoxels(region, VOXEL_RESOLUTION)
+
+        storedRegions[#storedRegions+1] = {
+            region = region,
+            material = material,
+            occupancy = occupancy
+        }
+
+        -- Clear voxels
+        Workspace.Terrain:FillRegion(region, VOXEL_RESOLUTION, Enum.Material.Air)
+    end
+
+    --// Restore all stored regions
+    local function restoreTerrain()
+        for _, data in ipairs(storedRegions) do
+            Workspace.Terrain:WriteVoxels(
+                data.region,
+                VOXEL_RESOLUTION,
+                data.material,
+                data.occupancy
+            )
+        end
+        storedRegions = {}
+    end
+
+    --// Delete on LMB + R key
+    Mouse.Button1Down:Connect(function()
+        if UserInputService:IsKeyDown(Enum.KeyCode.R) then
+            deleteTerrain()
+        end
+    end)
+
+    --// Restore on P key
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == Enum.KeyCode.P then
+            restoreTerrain()
+        end
+    end)
+
+end)
+
+
+
+task.spawn(function() -- << ISOLATED ESP SYSTEM >>
+
+    --// Services
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+    local Workspace = game:GetService("Workspace")
+
+    --// Camera
+    local Camera = Workspace.CurrentCamera
+
+    --// Drawing cache
+    local ESP = {}
+
+    --// Toggle states
+    local globalEnabled = true
+    local drawingsEnabled = true
+
+    --// ESP Definitions
+    local Definitions = {
+        {partName="Body",        partSize=Vector3.new(2.5,6.25,2.5),           espLabel="TC",      espColor=Color3.new(0,1,0)},
+        {partName="lights3",     partSize=Vector3.new(0.42277,0.66252,0.07328),espLabel="CAR",     espColor=Color3.new(1,0,0)},
+        {partName="Crates",      partSize=Vector3.new(5.8038,2.7799,5.7750),   espLabel="Airdrop", espColor=Color3.new(1,0.098,0)},
+        {partName="Prim",        partSize=Vector3.new(3,0.25,3),               espLabel="x",       espColor=Color3.new(0,0.478,0.866)},
+        {partName="Bottom",      partSize=Vector3.new(2.9764,2.1503,6.3147),   espLabel="Military",espColor=Color3.new(0.043,0.611,0.090)},
+        {partName="Hitbox",      partSize=Vector3.new(4.5,6.75,2.25),          espLabel="l",       espColor=Color3.new(1,0,0)},
+        {partName="Plastics2",   partSize=Vector3.new(5.54626,1.95559,3.85447),espLabel="ATV",     espColor=Color3.new(1,0,0)},
+        {partName="Prim",        partSize=Vector3.new(1.84245,3.09659,0.94747),espLabel="Gas",     espColor=Color3.new(1,0.098,0)},
+        {partName="Frame",       partSize=Vector3.new(6.3781,10.241,34.129),   espLabel="Chopper", espColor=Color3.new(1,0,0)},
+        {partName="Metal",       partSize=Vector3.new(2.7306,7.6353,2.7306),   espLabel="Z",       espColor=Color3.new(1,1,0)},
+        {partName="Hull",        partSize=Vector3.new(12.0834,6.6916,28.8747), espLabel="Boat",    espColor=Color3.new(1,0.2,0.6)},
+    }
+
+    --// Utility: size comparison
+    local function approxSize(a, b, threshold)
+        threshold = threshold or 0.01
+        return math.abs(a.X - b.X) <= threshold and
+               math.abs(a.Y - b.Y) <= threshold and
+               math.abs(a.Z - b.Z) <= threshold
+    end
+
+    --// Create ESP label
+    local function register(part, text, color)
+        if ESP[part] then return end
+
+        local obj = Drawing.new("Text")
+        obj.Size = 26
+        obj.Center = true
+        obj.Outline = true
+        obj.OutlineColor = Color3.new(0, 0, 0)
+        obj.Color = color
+        obj.Visible = true
+        obj.Text = text
+
+        ESP[part] = obj
+    end
+
+    --// Remove ESP label
+    local function remove(part)
+        if ESP[part] then
+            ESP[part]:Remove()
+            ESP[part] = nil
+        end
+    end
+
+    --// Main ESP update loop
+    local function updateESP()
+        if not globalEnabled or not drawingsEnabled then
+            for _, obj in pairs(ESP) do
+                obj.Visible = false
+            end
+            return
+        end
+
+        for part, textObj in pairs(ESP) do
+            if part and part:IsDescendantOf(Workspace) then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    textObj.Position = Vector2.new(screenPos.X, screenPos.Y)
+                    textObj.Visible = true
+                else
+                    textObj.Visible = false
+                end
+            else
+                remove(part)
+            end
+        end
+    end
+
+    --// Trigger when new objects appear
+    Workspace.DescendantAdded:Connect(function(obj)
+        for _, def in ipairs(Definitions) do
+            if obj:IsA("BasePart") and obj.Name == def.partName and approxSize(obj.Size, def.partSize) then
+                register(obj, def.espLabel, def.espColor)
+            end
+        end
+    end)
+
+    --// Trigger when objects removed
+    Workspace.DescendantRemoving:Connect(function(obj)
+        remove(obj)
+    end)
+
+    --// Initial scan
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        for _, def in ipairs(Definitions) do
+            if obj:IsA("BasePart") and obj.Name == def.partName and approxSize(obj.Size, def.partSize) then
+                register(obj, def.espLabel, def.espColor)
+            end
+        end
+    end
+
+    --// Toggle ESP drawing (O key)
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+
+        if input.KeyCode == Enum.KeyCode.O then
+            drawingsEnabled = not drawingsEnabled
+            if not drawingsEnabled then
+                for _, obj in pairs(ESP) do
+                    obj.Visible = false
+                end
+            end
+        end
+    end)
+
+    --// Render loop
+    RunService.RenderStepped:Connect(updateESP)
+
+end)
+
+
+
+
+task.spawn(function() -- << ISOLATED FORCESPRINT SYSTEM >>
+    -- Services
+    local Workspace = game:GetService("Workspace")
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+
+    -- Camera reference
+    local Camera = Workspace.CurrentCamera
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Settings
+    local toggleKey = Enum.KeyCode.N
+    local sprintSpeed = 20
+    local forceSprint = false
+
+    -- Character fetch
+    local function getMiddle()
+        local const = Workspace:WaitForChild("Const", 10)
+        local ignore = const:WaitForChild("Ignore", 10)
+        local localChar = ignore:WaitForChild("LocalCharacter", 10)
+        local middle = localChar:WaitForChild("Middle", 10)
+        return middle
+    end
+
+    local middle = getMiddle()
+
+    -- UI Indicator
+    local sprintText = Drawing.new("Text")
+    sprintText.Text = "ForceSprint"
+    sprintText.Color = Color3.new(0, 1, 0)
+    sprintText.Size = 25
+    sprintText.Outline = true
+    sprintText.Center = false
+    sprintText.Visible = false
+
+    -- Keep indicator positioned
+    RunService.RenderStepped:Connect(function()
+        local v = Camera.ViewportSize
+        sprintText.Position = Vector2.new(v.X - 100, 70)
+    end)
+
+    -- Toggle key
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == toggleKey then
+            forceSprint = not forceSprint
+            sprintText.Visible = forceSprint
+        end
+    end)
+
+    -- Movement loop (isolated)
+    RunService.RenderStepped:Connect(function()
+        if not forceSprint then return end
+
+        if not (middle and middle:IsDescendantOf(Workspace)) then
+            middle = getMiddle()
+            return
+        end
+
+        local look = Camera.CFrame.LookVector
+        local flat = Vector3.new(look.X, 0, look.Z)
+
+        if flat.Magnitude == 0 then return end
+        flat = flat.Unit
+
+        local direction = Vector3.zero
+
+        -- Movement keys
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            direction += flat
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            direction -= flat
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            direction += Vector3.new(-flat.Z, 0, flat.X)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            direction += Vector3.new(flat.Z, 0, -flat.X)
+        end
+
+        if direction.Magnitude > 0 then
+            direction = direction.Unit
+            local vel = middle.AssemblyLinearVelocity
+
+            -- Set horizontal sprint velocity
+            middle.AssemblyLinearVelocity = Vector3.new(
+                direction.X * sprintSpeed,
+                vel.Y,
+                direction.Z * sprintSpeed
+            )
+        end
+    end)
+
+end)
+
+
+
+task.spawn(function() -- << ISOLATED FREECAM SYSTEM >>
+
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local Camera = workspace.CurrentCamera
+
+    -- Settings
+    local toggleKey = Enum.KeyCode.K
+    local movementSpeed = 0.9
+
+    -- Internal State
+    local cameraCFrame = Camera.CFrame
+    local isCustomCameraMode = false
+    local pitchYaw = Vector2.new(0, 0)
+
+    -- Toggle Function
+    local function toggleCustomCameraMode()
+        isCustomCameraMode = not isCustomCameraMode
+
+        if isCustomCameraMode then
+            cameraCFrame = Camera.CFrame
+            
+            -- Extract pitch/yaw from camera direction
+            local lookVector = -cameraCFrame.LookVector
+            pitchYaw = Vector2.new(
+                math.asin(-lookVector.Y),
+                math.atan2(lookVector.X, lookVector.Z)
+            )
+        end
+    end
+
+    -- Update Loop
+    local function updateCamera(delta)
+        if not isCustomCameraMode then return end
+
+        -- Look
+        local mouseDelta = UserInputService:GetMouseDelta()
+        pitchYaw = pitchYaw + Vector2.new(-mouseDelta.Y * 0.002, -mouseDelta.X * 0.002)
+
+        -- Clamp vertical (pitch)
+        pitchYaw = Vector2.new(
+            math.clamp(pitchYaw.X, -math.rad(90), math.rad(90)),
+            pitchYaw.Y
+        )
+
+        -- New orientation only, maintain position
+        local newOrientation = CFrame.fromOrientation(pitchYaw.X, pitchYaw.Y, 0)
+        cameraCFrame = CFrame.new(cameraCFrame.Position) * newOrientation
+
+        -- Movement
+        local moveDir = Vector3.zero
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.F) then
+            moveDir += cameraCFrame.LookVector * movementSpeed
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.V) then
+            moveDir -= cameraCFrame.LookVector * movementSpeed
+        end
+
+        cameraCFrame = cameraCFrame + moveDir * delta * 64
+        Camera.CFrame = cameraCFrame
+    end
+
+    -- Key Toggle
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == toggleKey then
+            toggleCustomCameraMode()
+        end
+    end)
+
+    -- Render Loop
+    RunService.RenderStepped:Connect(updateCamera)
+
+end)
+
+
+
+
+task.spawn(function() -- << ISOLATED JETPACK ABUSE SYSTEM >>
+
+    --// Services
+    local Players = game:GetService("Players")
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local Workspace = game:GetService("Workspace")
+
+    --// Constants
+    local LocalPlayer = Players.LocalPlayer
+    local Camera = Workspace.CurrentCamera
+
+    --// Settings
+    local JETPACK_KEY = Enum.KeyCode.I
+    local UP_SPEED = 30
+    local HORIZONTAL_SPEED = 19
+    local jetpackEnabled = false
+
+    --// Wait for the body part
+    local function waitForCharacterParts()
+        local root = Workspace:WaitForChild("Const", 10):WaitForChild("Ignore", 10):WaitForChild("LocalCharacter", 10)
+        local middle = root:WaitForChild("Middle", 10)
+        return middle
+    end
+
+    --// Jetpack Status Text
+    local jetpackText = Drawing.new("Text")
+    jetpackText.Color = Color3.fromRGB(0, 255, 255)
+    jetpackText.Text = "Jetpack"
+    jetpackText.Size = 25
+    jetpackText.Outline = true
+    jetpackText.Center = false
+    jetpackText.Visible = false
+
+    --// Update text pos
+    RunService.RenderStepped:Connect(function()
+        local viewportSize = Camera.ViewportSize
+        jetpackText.Position = Vector2.new(viewportSize.X - 100, 130)
+    end)
+
+    --// Toggle Key
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == JETPACK_KEY then
+            jetpackEnabled = not jetpackEnabled
+            jetpackText.Visible = jetpackEnabled
+            print("[🚀] Jetpack:", jetpackEnabled and "ENABLED" or "DISABLED")
+        end
+    end)
+
+    --// Ensure the part exists
+    local middle = waitForCharacterParts()
+
+    --// Jetpack Physics Loop (isolated)
+    RunService:BindToRenderStep("JetpackAbuse", Enum.RenderPriority.Character.Value + 2, function()
+        if not jetpackEnabled then return end
+
+        if not middle or not middle:IsDescendantOf(Workspace) then
+            middle = waitForCharacterParts()
+            return
+        end
+
+        -- Movement Direction
+        local camDir = Camera.CFrame.LookVector
+        local flatDir = Vector3.new(camDir.X, 0, camDir.Z).Unit
+        local moveDir = Vector3.zero
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            moveDir += flatDir
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            moveDir -= flatDir
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            moveDir += Vector3.new(-flatDir.Z, 0, flatDir.X)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            moveDir += Vector3.new(flatDir.Z, 0, -flatDir.X)
+        end
+
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit
+        end
+
+        -- Vertical Movement
+        local yVelocity = 0
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            yVelocity = UP_SPEED
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            yVelocity = -UP_SPEED
+        end
+
+        -- Apply Velocity
+        pcall(function()
+            middle.AssemblyLinearVelocity = Vector3.new(
+                moveDir.X * HORIZONTAL_SPEED,
+                yVelocity,
+                moveDir.Z * HORIZONTAL_SPEED
+            )
+        end)
+    end)
+
+end)
+
+
+
+
+task.spawn(function() -- << ISOLATED LONGNECK SYSTEM >>
+    local UserInputService = game:GetService("UserInputService")
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+
+    local LocalPlayer = Players.LocalPlayer
+    local Keybind = Enum.KeyCode.L  -- Toggle key
+
+    -- Wait for required parts
+    local top, originalCFrame
+    repeat
+        local ok = pcall(function()
+            top = Workspace.Const.Ignore.LocalCharacter.Top
+            originalCFrame = top.Prism1.CFrame
+        end)
+        task.wait()
+    until ok and top and originalCFrame
+
+    local mode = 0 -- 0 = default, 1 = mode1, 2 = mode2
+
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed or input.KeyCode ~= Keybind then return end
+
+        mode = (mode + 1) % 3
+
+        if mode == 0 then
+            top.Prism1.CFrame = originalCFrame
+        elseif mode == 1 then
+            top.Prism1.CFrame = originalCFrame - Vector3.yAxis * 5
+        elseif mode == 2 then
+            top.Prism1.CFrame = originalCFrame - Vector3.yAxis * 6
+        end
+    end)
+end)
+
+
+
+
+
+
+
+
+
+
+
+task.spawn(function()  -- << ISOLATED HITMARKER SYSTEM >>
+    local notifications = {}
+    local camera = workspace.CurrentCamera
+    local run = game:GetService("RunService")
+    local log = game:GetService("LogService")
+
+    local function hitmarker_update()
+        local center = camera.ViewportSize / 2
+        for i = 1, #notifications do
+            notifications[i].Position = Vector2.new(center.X, (center.Y + 150) + (i * 18))
+        end
+    end
+
+    local function getRainbowColor(t)
+        local r = math.abs(math.sin(t * math.pi * 2))
+        local g = math.abs(math.sin((t + 1/3) * math.pi * 2))
+        local b = math.abs(math.sin((t + 2/3) * math.pi * 2))
+        return Color3.fromRGB(r * 255, g * 255, b * 255)
+    end
+
+    local function animateRainbowText(hitlog, name, distance, duration)
+        task.spawn(function()
+            local start = tick()
+            local conn
+
+            conn = run.RenderStepped:Connect(function()
+                local elapsed = tick() - start
+                hitlog.Text = " " .. name .. "  [" .. distance .. "] Studs "
+                hitlog.Color = getRainbowColor(elapsed / duration)
+
+                if elapsed >= duration then
+                    conn:Disconnect()
+                end
+            end)
+        end)
+    end
+
+    local function hitmarker(Name, Distance, Duration)
+        task.spawn(function()
+            local hitlog = Drawing.new("Text")
+            hitlog.Size = 25
+            hitlog.Font = 2
+            hitlog.Text = " " .. Name .. "  " .. Distance .. " Studs "
+            hitlog.Visible = true
+            hitlog.ZIndex = 3
+            hitlog.Center = true
+            hitlog.Outline = true
+
+            table.insert(notifications, hitlog)
+            hitmarker_update()
+
+            animateRainbowText(hitlog, Name, Distance, Duration)
+
+            task.delay(Duration, function()
+                local idx = table.find(notifications, hitlog)
+                if idx then
+                    table.remove(notifications, idx)
+                end
+                hitmarker_update()
+                hitlog:Remove()
+            end)
+        end)
+    end
+
+    log.MessageOut:Connect(function(message)
+        local Name = message:match("->([%w_]+)")
+        local Dist = message:match("(%d+%.?%d*)s")
+        if Name and Dist then
+            hitmarker(Name, Dist, 4)
+        end
+    end)
+end)
+
