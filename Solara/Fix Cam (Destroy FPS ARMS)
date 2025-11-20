@@ -1,0 +1,4 @@
+local arms = workspace:FindFirstChild("FPSArms", true)
+if arms then
+    arms:Destroy()
+end
