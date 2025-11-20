@@ -1,0 +1,60 @@
+local Lighting = game:GetService("Lighting")
+local Terrain = workspace:FindFirstChildOfClass("Terrain")
+
+-- REMOVE GRASS
+pcall(function()
+    sethiddenproperty(Terrain, "Decoration", false)
+end)
+
+-- === CORE SETTINGS ===
+Lighting.GlobalShadows = false
+Lighting.FogStart = 0
+Lighting.FogEnd = math.huge
+
+-- Balanced ambient (bright but not whitewashed)
+Lighting.Ambient = Color3.new(0.35, 0.38, 0.45)
+Lighting.OutdoorAmbient = Color3.new(0.55, 0.60, 0.70)
+
+-- ⭐ NIGHT TIME FOR STARS (around 2 AM)
+Lighting.Brightness = 3.2
+Lighting.ClockTime = 2.2 -- natural stars visible
+
+-- OPTIONAL: remove Atmosphere if you don't want tint
+local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
+if atmo then
+    atmo:Destroy()
+end
+
+
+local sky = Lighting:FindFirstChildOfClass("Sky")
+if sky then
+    sky:Destroy()
+end
+
+
+-- Still remove post-processing that can mess with colors
+for _, effect in ipairs(Lighting:GetChildren()) do
+    if effect:IsA("ColorCorrectionEffect")
+    or effect:IsA("BloomEffect")
+    or effect:IsA("SunRaysEffect")
+    or effect:IsA("DepthOfFieldEffect") then
+        effect:Destroy()
+    end
+end
+
+Lighting.EnvironmentDiffuseScale = 1
+Lighting.EnvironmentSpecularScale = 1
+
+-- === MAINTAIN LOOP ===
+game:GetService("RunService").Heartbeat:Connect(function()
+    Lighting.GlobalShadows = false
+    Lighting.FogStart = 0
+    Lighting.FogEnd = math.huge
+
+    Lighting.Ambient = Color3.new(0.35, 0.38, 0.45)
+    Lighting.OutdoorAmbient = Color3.new(0.55, 0.60, 0.70)
+
+    -- keep stars time locked
+    Lighting.Brightness = 3.2
+    Lighting.ClockTime = 2.2
+end)
