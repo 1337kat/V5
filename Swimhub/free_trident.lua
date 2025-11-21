@@ -34,9 +34,9 @@ if not LPH_OBFUSCATED then
 	SWG_DiscordID = 1337
 	SWG_Private = true
 	SWG_Dev = false
-	SWG_Version = 'paid'
-	SWG_Title = 'paid swimhub.xyz %s - %s | discord.gg/priv9'
-	SWG_ShortName = 'paid'
+	SWG_Version = 'free'
+	SWG_Title = 'free swimhub.xyz %s - %s | discord.gg/priv9'
+	SWG_ShortName = 'free'
 	SWG_FullName = 'ts'
 	SWG_FFA = false
 end
