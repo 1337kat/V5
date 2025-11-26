@@ -1,3 +1,356 @@
+-- REPLACE BHOP/SWIMHUB SPRINT WITH FASTEST SPRINT
+task.spawn(function()
+-- Clean Swim-like SpeedHack (no exploit wrappers, no debug prints)
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+-- Grab SwimHub-style parts
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+local middle = LocalCharacter:WaitForChild("Middle")
+local bottom = LocalCharacter:WaitForChild("Bottom")
+local top = LocalCharacter:WaitForChild("Top")
+
+-- Config
+local SPEED = 10000 -- max speed
+local MIN_SPEED = 17
+local bhop_enabled = true
+local downcliff_mode = false          -- toggle to test the "downcliff" behavior
+local bhop_silent = false            -- extra flag (if true, disables movement)
+
+-- Internal state
+local currentSpeed = SPEED
+local wtf = 0
+local firstActivated = false
+
+-- Local helpers / micro-optimizations
+local _IsKeyDown = UserInputService.IsKeyDown
+local _Vector3_new = Vector3.new
+local _Y_AXIS = Vector3.yAxis
+local RaycastParams_new = RaycastParams.new
+
+-- Raycast params used for downcliff checks (exclude the Ignore container)
+local rcParams = RaycastParams_new()
+rcParams.FilterType = Enum.RaycastFilterType.Exclude
+rcParams.FilterDescendantsInstances = { ignore }
+rcParams.IgnoreWater = true
+
+local function cameraFlatLook()
+    local look = Camera.CFrame.LookVector
+    local flat = _Vector3_new(look.X, 0, look.Z)
+    if flat.Magnitude == 0 then
+        return Vector3.zero
+    end
+    return flat.Unit
+end
+
+local function findGroundBelow(part, maxDistance)
+    maxDistance = maxDistance or 10
+    local origin = part.Position
+    local direction = Vector3.new(0, -1, 0) * maxDistance
+    local result = Workspace:Raycast(origin, direction, rcParams)
+    if result and result.Position then
+        return result.Position, result.Instance
+    end
+    return nil, nil
+end
+
+local conn
+conn = RunService.RenderStepped:Connect(function(delta)
+    if bhop_silent then
+        currentSpeed = SPEED
+        wtf = 0
+        return
+    end
+
+    local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
+    local ckey  = _IsKeyDown(UserInputService, Enum.KeyCode.C)
+
+    if not (bhop_enabled and not downcliff_mode and shift and ckey) then
+        currentSpeed = SPEED
+        wtf = 0
+        firstActivated = false
+        return
+    end
+
+    if not firstActivated then
+        firstActivated = true
+        task.wait(0.01)
+        local topCF = top.CFrame
+        local midCF = middle.CFrame
+        local botCF = bottom.CFrame
+
+        middle.CFrame = midCF + _Y_AXIS * 3
+        bottom.CFrame = botCF + _Y_AXIS * 3
+        top.CFrame = topCF + _Y_AXIS * 3
+    end
+
+    local flat = cameraFlatLook()
+    local move = Vector3.zero
+
+    if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
+    if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
+    if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
+    if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
+
+    if move.Magnitude == 0 then
+        currentSpeed = SPEED
+        wtf = 0
+        return
+    end
+
+    move = move.Unit
+    currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
+
+    if downcliff_mode then
+        local groundPos = findGroundBelow(middle, 12)
+        if groundPos then
+            local desiredMiddle = groundPos + Vector3.new(0, 1.5, 0)
+            local topOffset = top.CFrame.Position - middle.Position
+            local bottomOffset = bottom.CFrame.Position - middle.Position
+
+            middle.CFrame = CFrame.new(desiredMiddle)
+            top.CFrame = CFrame.new(desiredMiddle + topOffset)
+            bottom.CFrame = CFrame.new(desiredMiddle + bottomOffset)
+
+            local forwardPush = move * math.max(currentSpeed * 0.6, MIN_SPEED)
+            middle.AssemblyLinearVelocity = forwardPush
+            top.AssemblyLinearVelocity = forwardPush
+            bottom.AssemblyLinearVelocity = forwardPush
+
+            wtf += delta
+            return
+        end
+    end
+
+    local yForce = (wtf < 0.80) and 0 or -9
+    local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
+
+    middle.AssemblyLinearVelocity = velocity
+    top.AssemblyLinearVelocity = velocity
+    bottom.AssemblyLinearVelocity = velocity
+
+    wtf += delta
+end)
+
+local function unload()
+    if conn then
+        conn:Disconnect()
+        conn = nil
+    end
+end
+
+return {
+    unload = unload,
+    setDowncliff = function(v) downcliff_mode = v end,
+    setSilent = function(v) bhop_silent = v end,
+    setEnabled = function(v) bhop_enabled = v end
+}
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- LOOP TOGGLE BHOP
+task.spawn(function()
+
+--============================================================--
+--   MASTER BUTTON + HOLY GRAIL KEY ENGINE (FULL VERSION)
+--============================================================--
+
+local hui = gethui and gethui()
+if not hui then return warn("gethui() not supported") end
+
+-- Re-exec cleanup
+local old = hui:FindFirstChild("MasterToggleUI")
+if old then old:Destroy() end
+
+--============================================================--
+--   UI BUTTON (Right side, tiny, non-annoying)
+--============================================================--
+local sg = Instance.new("ScreenGui")
+sg.Name = "MasterToggleUI"
+sg.IgnoreGuiInset = true
+sg.ResetOnSpawn = false
+sg.Parent = hui
+
+local btn = Instance.new("Frame")
+btn.AnchorPoint = Vector2.new(1, 0.5)
+btn.Size = UDim2.fromOffset(38, 38)
+btn.Position = UDim2.fromScale(1, 0.42)
+btn.BackgroundTransparency = 1
+btn.Parent = sg
+
+local click = Instance.new("TextButton")
+click.Size = UDim2.fromScale(1, 1)
+click.BackgroundTransparency = 1
+click.Text = ""
+click.Parent = btn
+
+-- ON (green) / OFF (red)
+local onIcon = Instance.new("Frame")
+onIcon.Size = UDim2.fromScale(0.55, 0.55)
+onIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+onIcon.Position = UDim2.fromScale(0.5, 0.5)
+onIcon.BackgroundColor3 = Color3.fromRGB(0,255,0)
+onIcon.Visible = false
+onIcon.Parent = btn
+
+local offIcon = Instance.new("Frame")
+offIcon.Size = UDim2.fromScale(0.55, 0.55)
+offIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+offIcon.Position = UDim2.fromScale(0.5, 0.5)
+offIcon.BackgroundColor3 = Color3.fromRGB(255,0,0)
+offIcon.Visible = true
+offIcon.Parent = btn
+
+-- Primary master toggle
+local MASTER = false
+
+
+
+--============================================================--
+--   HOLY GRAIL KEY ENGINE (Zero Key-Stick. Cancel-Safe.)
+--============================================================--
+
+local VIM = game:GetService("VirtualInputManager")
+local UIS = game:GetService("UserInputService")
+
+local STATE = {
+    Enabled = false,
+    Thread = nil,
+}
+
+local KEYS = {
+    Enum.KeyCode.LeftShift,
+    Enum.KeyCode.C
+}
+
+local function Key(k, down)
+    VIM:SendKeyEvent(down, k, false, game)
+end
+
+local function ReleaseAll()
+    for _, k in ipairs(KEYS) do
+        Key(k, false)
+    end
+end
+
+local function KillThread()
+    if STATE.Thread and coroutine.status(STATE.Thread) == "suspended" then
+        coroutine.close(STATE.Thread)
+    end
+    STATE.Thread = nil
+    ReleaseAll()
+end
+
+local function Engine()
+    while STATE.Enabled do
+        for _, k in ipairs(KEYS) do Key(k, true) end
+        task.wait(0.90)
+
+        for _, k in ipairs(KEYS) do Key(k, false) end
+        task.wait(0.75)
+    end
+    ReleaseAll()
+end
+
+local function Toggle()
+    -- BLOCKED unless Master button is ON
+    if not MASTER then
+        print("[BLOCKED] Master button is OFF")
+        return
+    end
+
+    STATE.Enabled = not STATE.Enabled
+
+    if not STATE.Enabled then
+        KillThread()
+        return
+    end
+
+    KillThread()
+
+    local thread = coroutine.create(Engine)
+    STATE.Thread = thread
+    coroutine.resume(thread)
+end
+
+-- Bind F to toggle engine
+UIS.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == Enum.KeyCode.F then
+        Toggle()
+    end
+end)
+
+-- Always cleanup on re-exec
+ReleaseAll()
+KillThread()
+
+
+
+--============================================================--
+--   BUTTON CLICK → MASTER ON/OFF SWITCH
+--============================================================--
+click.MouseButton1Click:Connect(function()
+    MASTER = not MASTER
+
+    onIcon.Visible = MASTER
+    offIcon.Visible = not MASTER
+
+    -- If turning OFF → kill engine immediately
+    if not MASTER then
+        STATE.Enabled = false
+        KillThread()
+
+        -- quick double safety flush
+        task.spawn(function()
+            for i = 1,3 do
+                VIM:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+                VIM:SendKeyEvent(false, Enum.KeyCode.C, false, game)
+                task.wait()
+            end
+        end)
+    end
+end)
+
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 -- Throwable Objects
 task.spawn(function() -- << ISOLATED BUBBLE >>
 
@@ -1293,169 +1646,6 @@ end)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
--- REPLACE BHOP/SWIMHUB SPRINT WITH FASTEST SPRINT
-task.spawn(function()
--- Clean Swim-like SpeedHack (no exploit wrappers, no debug prints)
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
-
--- Grab SwimHub-style parts
-local const = Workspace:WaitForChild("Const")
-local ignore = const:WaitForChild("Ignore")
-local LocalCharacter = ignore:WaitForChild("LocalCharacter")
-local middle = LocalCharacter:WaitForChild("Middle")
-local bottom = LocalCharacter:WaitForChild("Bottom")
-local top = LocalCharacter:WaitForChild("Top")
-
--- Config
-local SPEED = 10000 -- max speed
-local MIN_SPEED = 17
-local bhop_enabled = true
-local downcliff_mode = false          -- toggle to test the "downcliff" behavior
-local bhop_silent = false            -- extra flag (if true, disables movement)
-
--- Internal state
-local currentSpeed = SPEED
-local wtf = 0
-local firstActivated = false
-
--- Local helpers / micro-optimizations
-local _IsKeyDown = UserInputService.IsKeyDown
-local _Vector3_new = Vector3.new
-local _Y_AXIS = Vector3.yAxis
-local RaycastParams_new = RaycastParams.new
-
--- Raycast params used for downcliff checks (exclude the Ignore container)
-local rcParams = RaycastParams_new()
-rcParams.FilterType = Enum.RaycastFilterType.Exclude
-rcParams.FilterDescendantsInstances = { ignore }
-rcParams.IgnoreWater = true
-
-local function cameraFlatLook()
-    local look = Camera.CFrame.LookVector
-    local flat = _Vector3_new(look.X, 0, look.Z)
-    if flat.Magnitude == 0 then
-        return Vector3.zero
-    end
-    return flat.Unit
-end
-
-local function findGroundBelow(part, maxDistance)
-    maxDistance = maxDistance or 10
-    local origin = part.Position
-    local direction = Vector3.new(0, -1, 0) * maxDistance
-    local result = Workspace:Raycast(origin, direction, rcParams)
-    if result and result.Position then
-        return result.Position, result.Instance
-    end
-    return nil, nil
-end
-
-local conn
-conn = RunService.RenderStepped:Connect(function(delta)
-    if bhop_silent then
-        currentSpeed = SPEED
-        wtf = 0
-        return
-    end
-
-    local shift = _IsKeyDown(UserInputService, Enum.KeyCode.LeftShift)
-    local ckey  = _IsKeyDown(UserInputService, Enum.KeyCode.C)
-
-    if not (bhop_enabled and not downcliff_mode and shift and ckey) then
-        currentSpeed = SPEED
-        wtf = 0
-        firstActivated = false
-        return
-    end
-
-    if not firstActivated then
-        firstActivated = true
-        task.wait(0.01)
-        local topCF = top.CFrame
-        local midCF = middle.CFrame
-        local botCF = bottom.CFrame
-
-        middle.CFrame = midCF + _Y_AXIS * 3
-        bottom.CFrame = botCF + _Y_AXIS * 3
-        top.CFrame = topCF + _Y_AXIS * 3
-    end
-
-    local flat = cameraFlatLook()
-    local move = Vector3.zero
-
-    if _IsKeyDown(UserInputService, Enum.KeyCode.W) then move += flat end
-    if _IsKeyDown(UserInputService, Enum.KeyCode.S) then move -= flat end
-    if _IsKeyDown(UserInputService, Enum.KeyCode.D) then move += Vector3.new(-flat.Z, 0, flat.X) end
-    if _IsKeyDown(UserInputService, Enum.KeyCode.A) then move += Vector3.new(flat.Z, 0, -flat.X) end
-
-    if move.Magnitude == 0 then
-        currentSpeed = SPEED
-        wtf = 0
-        return
-    end
-
-    move = move.Unit
-    currentSpeed = math.clamp(currentSpeed - delta * 20, MIN_SPEED, SPEED)
-
-    if downcliff_mode then
-        local groundPos = findGroundBelow(middle, 12)
-        if groundPos then
-            local desiredMiddle = groundPos + Vector3.new(0, 1.5, 0)
-            local topOffset = top.CFrame.Position - middle.Position
-            local bottomOffset = bottom.CFrame.Position - middle.Position
-
-            middle.CFrame = CFrame.new(desiredMiddle)
-            top.CFrame = CFrame.new(desiredMiddle + topOffset)
-            bottom.CFrame = CFrame.new(desiredMiddle + bottomOffset)
-
-            local forwardPush = move * math.max(currentSpeed * 0.6, MIN_SPEED)
-            middle.AssemblyLinearVelocity = forwardPush
-            top.AssemblyLinearVelocity = forwardPush
-            bottom.AssemblyLinearVelocity = forwardPush
-
-            wtf += delta
-            return
-        end
-    end
-
-    local yForce = (wtf < 0.80) and 0 or -9
-    local velocity = move * currentSpeed + Vector3.new(0, yForce, 0)
-
-    middle.AssemblyLinearVelocity = velocity
-    top.AssemblyLinearVelocity = velocity
-    bottom.AssemblyLinearVelocity = velocity
-
-    wtf += delta
-end)
-
-local function unload()
-    if conn then
-        conn:Disconnect()
-        conn = nil
-    end
-end
-
-return {
-    unload = unload,
-    setDowncliff = function(v) downcliff_mode = v end,
-    setSilent = function(v) bhop_silent = v end,
-    setEnabled = function(v) bhop_enabled = v end
-}
-end)
 
 
 
