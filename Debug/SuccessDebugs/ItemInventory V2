@@ -1,0 +1,34 @@
+local equipped = "Nothing"
+local last = nil
+
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+local old = mt.__namecall
+
+mt.__namecall = function(self, ...)
+    local method = getnamecallmethod()
+
+    if method == "FireServer" then
+        local args = {...}
+
+        -- print packet ONCE per new packet
+        print("PACKET →", self, unpack(args)) 
+
+        -- detect strings that look like item types
+        for i, v in ipairs(args) do
+            if type(v) == "string" and #v < 20 and v:match("^[%w_]+$") then
+                equipped = v
+            end
+        end
+    end
+
+    return old(self, ...)
+end
+
+game:GetService("RunService").Heartbeat:Connect(function()
+    if equipped ~= last then
+        print("Now holding:", equipped)
+        last = equipped
+    end
+end)
