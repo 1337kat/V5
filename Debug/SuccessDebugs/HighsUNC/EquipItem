@@ -1,0 +1,54 @@
+local equipped = "Nothing"
+local lastEquipped = "Nothing"
+local debounce = false   -- hard lock so it can NEVER spam
+
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+local old = mt.__namecall
+
+mt.__namecall = function(self, ...)
+    local method = getnamecallmethod()
+
+    if method == "FireServer" then
+        local args = {...}
+
+        -- Detect equip candidates
+        for _, v in ipairs(args) do
+            if type(v) == "string"
+                and #v <= 25
+                and v:match("^[%w_]+$")
+            then
+                -- Update equipped but DO NOT print here
+                equipped = v
+                break
+            end
+        end
+    end
+
+    return old(self, ...)
+end
+
+
+-- Only print when the equipped item actually CHANGES
+task.spawn(function()
+
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if equipped ~= lastEquipped then
+
+            if not debounce then
+                debounce = true
+
+                print("Equipped:", equipped)
+
+                lastEquipped = equipped
+
+                -- unlock after a tiny delay so packet bursts can't trigger multiple times
+                task.delay(0.05, function()
+                    debounce = false
+                end)
+            end
+        end
+    end)
+
+end)
