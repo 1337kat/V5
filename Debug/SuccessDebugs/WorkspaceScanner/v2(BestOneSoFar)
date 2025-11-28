@@ -1,0 +1,81 @@
+task.spawn(function()
+    local container = workspace.Const.Ignore
+    local currentSignature = ""
+
+    --========================================================--
+    --  HASH FUNCTION (FAST, CONSISTENT)
+    --========================================================--
+    local function hash(str)
+        local h = 0
+        for i = 1, #str do
+            h = (h * 31 + str:byte(i)) % 100000 -- 5-digit signature
+        end
+        return tostring(h)
+    end
+
+    --========================================================--
+    --  TOOL SIGNATURE GENERATOR
+    --========================================================--
+    local function generateSignature(model)
+        local dump = {}
+
+        for _, d in ipairs(model:GetDescendants()) do
+            table.insert(dump, d.ClassName .. ":" .. d.Name)
+        end
+
+        table.sort(dump)
+        return hash(table.concat(dump, "|"))
+    end
+
+    --========================================================--
+    --  DEBUG OVERLAY
+    --========================================================--
+    local debugText = Drawing.new("Text")
+    debugText.Text = "Tool: Nothing"
+    debugText.Size = 22
+    debugText.Center = false
+    debugText.Outline = true
+    debugText.Color = Color3.new(1,1,1)
+    debugText.Position = Vector2.new(20, 120)
+    debugText.Visible = true
+
+    --========================================================--
+    --  SCAN FUNCTION
+    --========================================================--
+    local function scan()
+        local found = nil
+
+        for _, v in ipairs(container:GetChildren()) do
+            if v:IsA("Model")
+                and v.Name ~= "LocalCharacter"
+                and v.Name ~= "FPSArms" then
+
+                found = v
+            end
+        end
+
+        if found then
+            local sig = generateSignature(found)
+
+            if sig ~= currentSignature then
+                currentSignature = sig
+                debugText.Text = "Tool: " .. found.Name .. " [" .. sig .. "]"
+                print("Detected Tool:", found.Name, "Signature:", sig)
+            end
+        else
+            if currentSignature ~= "" then
+                currentSignature = ""
+                debugText.Text = "Tool: Nothing"
+                print("Now holding: Nothing")
+            end
+        end
+    end
+
+    -- Initial scan
+    scan()
+
+    -- Live updates
+    container.ChildAdded:Connect(scan)
+    container.ChildRemoved:Connect(scan)
+    game:GetService("RunService").RenderStepped:Connect(scan)
+end)
