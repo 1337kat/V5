@@ -1,0 +1,11 @@
+
+local container = workspace.Const.Ignore
+
+for _,v in ipairs(container:GetChildren()) do
+    if v:IsA("Model") and v.Name ~= "LocalCharacter" and v.Name ~= "FPSArms" then
+        print("\n=== TOOL DUMP ===", v.Name)
+        for _,d in ipairs(v:GetDescendants()) do
+            print(d.ClassName, d.Name)
+        end
+    end
+end
