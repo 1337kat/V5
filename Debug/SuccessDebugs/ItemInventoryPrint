@@ -1,0 +1,35 @@
+local equipped = "Nothing"
+
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+local old = mt.__namecall
+
+mt.__namecall = function(self, ...)
+    local method = getnamecallmethod()
+
+    if method == "FireServer" then
+        local args = {...}
+
+        -- This prints every outbound packet
+        -- so we can identify the EQUIP packet
+        -- (industry standard packet sniffing)
+        print("Packet:", self, unpack(args))
+
+        -- Detect equip-item packets
+        -- (itemType is usually args[3] or args[4] depending on the game)
+        for i, v in ipairs(args) do
+            if type(v) == "string" and v:len() < 20 and v:match("^[%w_]+$") then
+                equipped = v
+            end
+        end
+    end
+
+    return old(self, ...)
+end
+
+task.spawn(function()
+    game:GetService("RunService").RenderStepped:Connect(function()
+        print("Now holding:", equipped)
+    end)
+end)
