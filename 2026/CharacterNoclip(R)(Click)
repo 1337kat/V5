@@ -1,0 +1,82 @@
+task.spawn(function()
+-- Character Noclip
+local Workspace = game:GetService("Workspace")
+local UIS = game:GetService("UserInputService")
+
+-- Grab character container (SwimHub style)
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+
+-- Gather all character BaseParts once
+local parts = {}
+for _, obj in ipairs(LocalCharacter:GetDescendants()) do
+    if obj:IsA("BasePart") then
+        table.insert(parts, obj)
+    end
+end
+
+--========================================================--
+--  STATE
+--========================================================--
+local noclip = false
+local holdingR = false
+local holdingLMB = false
+
+--========================================================--
+--  APPLY / REVERT COLLISION
+--========================================================--
+local function applyNoCollision(state)
+    for _, part in ipairs(parts) do
+        part.CanCollide = not state
+    end
+end
+
+--========================================================--
+--  STRICT HOLD CHECKER (R + LMB)
+--========================================================--
+local function refreshState()
+    local shouldEnable = holdingR and holdingLMB
+
+    if shouldEnable and not noclip then
+        noclip = true
+        applyNoCollision(true)
+
+    elseif not shouldEnable and noclip then
+        noclip = false
+        applyNoCollision(false)
+    end
+end
+
+--========================================================--
+--  INPUT LOGIC
+--========================================================--
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+
+    if input.KeyCode == Enum.KeyCode.R then
+        holdingR = true
+        refreshState()
+    end
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        holdingLMB = true
+        refreshState()
+    end
+end)
+
+UIS.InputEnded:Connect(function(input, gp)
+    if gp then return end
+
+    if input.KeyCode == Enum.KeyCode.R then
+        holdingR = false
+        refreshState()
+    end
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        holdingLMB = false
+        refreshState()
+    end
+end)
+
+end)
