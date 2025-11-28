@@ -1743,78 +1743,92 @@ end)
 
 
 
+task.spawn(function()
+--========================================================--
+--  HOLD-TO-NOCLIP (LeftControl)
+--  Hold = NoCollision ON
+--  Release = NoCollision OFF
+--========================================================--
 
-task.spawn(function() -- << ISOLATED TERRAIN MODIFIER >>
+local Workspace = game:GetService("Workspace")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = Workspace.CurrentCamera
 
-    --// Services
-    local Players = game:GetService("Players")
-    local UserInputService = game:GetService("UserInputService")
-    local Workspace = game:GetService("Workspace")
+-- Grab character container (SwimHub style)
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
 
-    --// Player + Mouse
-    local LocalPlayer = Players.LocalPlayer
-    local Mouse = LocalPlayer:GetMouse()
-
-    --// Stored regions (for restoration)
-    local storedRegions = {}
-
-    --// Settings
-    local REGION_SIZE = Vector3.new(26, 18, 18)  -- editable
-    local VOXEL_RESOLUTION = 4                   -- 4x4x4 blocks
-
-    --// Delete terrain at mouse position
-    local function deleteTerrain()
-        if not Mouse.Target then return end
-
-        -- Define region around mouse hit
-        local pos = Mouse.Hit.Position
-        local region = Region3.new(
-            pos - REGION_SIZE/2,
-            pos + REGION_SIZE/2
-        )
-
-        -- Read voxel data
-        local material, occupancy = Workspace.Terrain:ReadVoxels(region, VOXEL_RESOLUTION)
-
-        storedRegions[#storedRegions+1] = {
-            region = region,
-            material = material,
-            occupancy = occupancy
-        }
-
-        -- Clear voxels
-        Workspace.Terrain:FillRegion(region, VOXEL_RESOLUTION, Enum.Material.Air)
+-- Gather all character BaseParts once
+local parts = {}
+for _, obj in ipairs(LocalCharacter:GetDescendants()) do
+    if obj:IsA("BasePart") then
+        table.insert(parts, obj)
     end
+end
 
-    --// Restore all stored regions
-    local function restoreTerrain()
-        for _, data in ipairs(storedRegions) do
-            Workspace.Terrain:WriteVoxels(
-                data.region,
-                VOXEL_RESOLUTION,
-                data.material,
-                data.occupancy
-            )
-        end
-        storedRegions = {}
-    end
+--========================================================--
+--  STATE
+--========================================================--
+local noclip = false
 
-    --// Delete on LMB + R key
-    Mouse.Button1Down:Connect(function()
-        if UserInputService:IsKeyDown(Enum.KeyCode.R) then
-            deleteTerrain()
-        end
-    end)
+--========================================================--
+--  UI INDICATOR
+--========================================================--
+local indicator = Drawing.new("Text")
+indicator.Color = Color3.new(1,0,0)
+indicator.Size = 24
+indicator.Text = "NoCollision: OFF"
+indicator.Outline = true
+indicator.Visible = true
 
-    --// Restore on P key
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
-        if input.KeyCode == Enum.KeyCode.P then
-            restoreTerrain()
-        end
-    end)
-
+RunService.RenderStepped:Connect(function()
+    local v = Camera.ViewportSize
+    indicator.Position = Vector2.new(v.X - 160, 60)
 end)
+
+local function updateIndicator()
+    if noclip then
+        indicator.Color = Color3.new(0,1,0)
+        indicator.Text = "NoCollision: ON"
+    else
+        indicator.Color = Color3.new(1,0,0)
+        indicator.Text = "NoCollision: OFF"
+    end
+end
+
+--========================================================--
+--  APPLY / REVERT COLLISION
+--========================================================--
+local function applyNoCollision(state)
+    for _, part in ipairs(parts) do
+        part.CanCollide = not state
+    end
+end
+
+--========================================================--
+--  HOLD LOGIC (LeftControl)
+--========================================================--
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        noclip = true
+        applyNoCollision(true)
+        updateIndicator()
+    end
+end)
+
+UIS.InputEnded:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        noclip = false
+        applyNoCollision(false)
+        updateIndicator()
+    end
+end)
+end)
+
 
 
 
