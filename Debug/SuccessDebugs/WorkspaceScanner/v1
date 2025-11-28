@@ -1,0 +1,26 @@
+task.spawn(function()
+    local container = workspace.Const.Ignore
+    local current = "Nothing"
+
+    local function scan()
+        local found = "Nothing"
+
+        for _, v in ipairs(container:GetChildren()) do
+            if v:IsA("Model") and v.Name ~= "LocalCharacter" and v.Name ~= "FPSArms" then
+                found = v.Name
+            end
+        end
+
+        if found ~= current then
+            current = found
+            print("Now holding:", current)
+        end
+    end
+
+    -- Initial check
+    scan()
+
+    -- Live updates
+    container.ChildAdded:Connect(scan)
+    container.ChildRemoved:Connect(scan)
+end)
