@@ -1,0 +1,83 @@
+--========================================================--
+--  HOLD-TO-NOCLIP (LeftControl)
+--  Hold = NoCollision ON
+--  Release = NoCollision OFF
+--========================================================--
+
+local Workspace = game:GetService("Workspace")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = Workspace.CurrentCamera
+
+-- Grab character container (SwimHub style)
+local const = Workspace:WaitForChild("Const")
+local ignore = const:WaitForChild("Ignore")
+local LocalCharacter = ignore:WaitForChild("LocalCharacter")
+
+-- Gather all character BaseParts once
+local parts = {}
+for _, obj in ipairs(LocalCharacter:GetDescendants()) do
+    if obj:IsA("BasePart") then
+        table.insert(parts, obj)
+    end
+end
+
+--========================================================--
+--  STATE
+--========================================================--
+local noclip = false
+
+--========================================================--
+--  UI INDICATOR
+--========================================================--
+local indicator = Drawing.new("Text")
+indicator.Color = Color3.new(1,0,0)
+indicator.Size = 24
+indicator.Text = "NoCollision: OFF"
+indicator.Outline = true
+indicator.Visible = true
+
+RunService.RenderStepped:Connect(function()
+    local v = Camera.ViewportSize
+    indicator.Position = Vector2.new(v.X - 160, 60)
+end)
+
+local function updateIndicator()
+    if noclip then
+        indicator.Color = Color3.new(0,1,0)
+        indicator.Text = "NoCollision: ON"
+    else
+        indicator.Color = Color3.new(1,0,0)
+        indicator.Text = "NoCollision: OFF"
+    end
+end
+
+--========================================================--
+--  APPLY / REVERT COLLISION
+--========================================================--
+local function applyNoCollision(state)
+    for _, part in ipairs(parts) do
+        part.CanCollide = not state
+    end
+end
+
+--========================================================--
+--  HOLD LOGIC (LeftControl)
+--========================================================--
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        noclip = true
+        applyNoCollision(true)
+        updateIndicator()
+    end
+end)
+
+UIS.InputEnded:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        noclip = false
+        applyNoCollision(false)
+        updateIndicator()
+    end
+end)
