@@ -1,0 +1,56 @@
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local Workspace = game:GetService("Workspace")
+
+-- HELMET CAMERA HEIGHT ADJUSTMENT
+local HEIGHT_OFFSET = 4   -- adjust this to raise/lower the camera
+
+-- Your custom LocalCharacter
+local Middle = Workspace.Const.Ignore.LocalCharacter:WaitForChild("Middle")
+
+local toggleKey = Enum.KeyCode.X
+local movementSpeed = 1
+
+local camCFrame = Camera.CFrame
+local freecam = false
+local pitchYaw = Vector2.new()
+
+local function toggle()
+	freecam = not freecam
+	if freecam then
+		camCFrame = Camera.CFrame
+
+		local lv = -camCFrame.LookVector
+		pitchYaw = Vector2.new(
+			math.asin(-lv.Y),
+			math.atan2(lv.X, lv.Z)
+		)
+	end
+end
+
+UIS.InputBegan:Connect(function(input, gpe)
+	if not gpe and input.KeyCode == toggleKey then
+		toggle()
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if not freecam then return end
+	if not Middle then return end
+
+	local delta = UIS:GetMouseDelta()
+
+	pitchYaw = pitchYaw + Vector2.new(-delta.Y * 0.002, -delta.X * 0.002)
+	pitchYaw = Vector2.new(
+		math.clamp(pitchYaw.X, -math.rad(90), math.rad(90)),
+		pitchYaw.Y
+	)
+
+	local rot = CFrame.fromOrientation(pitchYaw.X, pitchYaw.Y, 0)
+
+	-- ⭐ Adjustable height
+	local pos = Middle.Position + Vector3.new(0, HEIGHT_OFFSET, 0)
+
+	Camera.CFrame = CFrame.new(pos) * rot
+end)
