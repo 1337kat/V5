@@ -5,49 +5,66 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 
 ```lua
 -- ================================================================
---  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET
+--  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET (Drawing Version)
 -- ================================================================
 local function isParallelOnMainEnabled()
-    -- (Executors sometimes update fflags 1 tick later)
     task.wait()
 
     local ok, value = pcall(function()
-        return getfflag and getfflag('DebugRunParallelLuaOnMainThread')
+        return getfflag and getfflag("DebugRunParallelLuaOnMainThread")
     end)
 
     if not ok or value == nil then
         return false
     end
 
-    -- normalize ("True", true, "1", etc.)
     value = tostring(value):lower()
-
-    return (value == 'true' or value == '1')
+    return (value == "true" or value == "1")
 end
 
+-- ================================================================
+--  DRAWING-ONLY WARNING UI (NO COREGUI)
+-- ================================================================
 if not isParallelOnMainEnabled() then
-    local CoreGui = game:GetService('CoreGui')
-    local sg = Instance.new('ScreenGui')
-    sg.Parent = CoreGui
-    sg.ResetOnSpawn = false
-    sg.Name = 'FFlagWarning'
+    
+    -- Shadow layer for readability
+    local shadow = Drawing.new("Text")
+    shadow.Text = "⚠️ ENABLE FFLAG: setfflag('DebugRunParallelLuaOnMainThread','True')"
+    shadow.Size = 60
+    shadow.Center = true
+    shadow.Outline = true
+    shadow.OutlineColor = Color3.new(0,0,0)
+    shadow.Color = Color3.new(0, 0, 0)
+    shadow.Font = Drawing.Fonts.Monospace
+    shadow.Visible = true
 
-    local label = Instance.new('TextLabel')
-    label.Parent = sg
-    label.Size = UDim2.new(1, 0, 0, 60)
-    label.Position = UDim2.new(0, 0, 0, 20)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(255, 90, 90)
-    label.TextSize = 28
-    label.Font = Enum.Font.Code
-    label.Text =
-        "⚠️ Please run: setfflag('DebugRunParallelLuaOnMainThread','True')"
-    label.TextStrokeTransparency = 0.3
-    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    -- Main bright text
+    local warning = Drawing.new("Text")
+    warning.Text = "⚠️ ENABLE FFLAG: setfflag('DebugRunParallelLuaOnMainThread','True')"
+    warning.Size = 60
+    warning.Center = true
+    warning.Outline = true
+    warning.OutlineColor = Color3.new(0,0,0)
+    warning.Color = Color3.fromRGB(255, 60, 60)
+    warning.Font = Drawing.Fonts.Monospace
+    warning.Visible = true
 
-    warn(
-        '⚠️ DebugRunParallelLuaOnMainThread is NOT enabled. Script execution blocked.'
-    )
+    -- Perfect centering loop
+    task.spawn(function()
+        while warning and warning.Visible do
+            local cam = workspace.CurrentCamera
+            if cam then
+                local vp = cam.ViewportSize
+                local center = Vector2.new(vp.X/2, vp.Y/2)
+
+                warning.Position = center
+                shadow.Position  = center + Vector2.new(3, 3)
+            end
+            task.wait()
+        end
+    end)
+
+    warn("⚠️ DebugRunParallelLuaOnMainThread disabled — SCRIPT BLOCKED.")
     return
 end
 
@@ -84,7 +101,7 @@ setreadonly(mt, true)
 --  ONE-TIME SESSION GUARD
 -- ================================================================
 if shared.allScriptsExecutedOnce then
-    warn('🚫 All scripts have already been executed this session.')
+    warn("🚫 All scripts have already been executed this session.")
     return
 end
 
@@ -95,17 +112,16 @@ shared.failedScripts = {}
 --  CONFIGURATION
 -- ================================================================
 local scripts = {
-    'https://raw.githubusercontent.com/1337kat/V5/main/main',
+    "https://raw.githubusercontent.com/1337kat/V5/main/main",
 }
 
--- Masking function: shows only last 8 characters (excluding extension)
 local function maskedName(url)
-    local name = url:match('([^/]+)$') or 'Unknown'
-    name = name:gsub('%.lua', '') -- remove file extension
+    local name = url:match("([^/]+)$") or "Unknown"
+    name = name:gsub("%.lua", "")
     if #name > 8 then
-        return '***' .. name:sub(-8)
+        return "***" .. name:sub(-8)
     else
-        return '***' .. name
+        return "***" .. name
     end
 end
 
@@ -122,19 +138,13 @@ for i, rawUrl in ipairs(scripts) do
 
         if success then
             shared.executedScripts[i] = true
-            print(string.format('✅ #%d %s executed successfully.', i, hint))
+            print(string.format("✅ #%d %s executed successfully.", i, hint))
         else
             table.insert(shared.failedScripts, { index = i, hint = hint })
-            warn(string.format('❌ #%d %s failed to execute.', i, hint))
+            warn(string.format("❌ #%d %s failed to execute.", i, hint))
         end
     else
-        print(
-            string.format(
-                '⏭️ #%d %s already executed this session.',
-                i,
-                hint
-            )
-        )
+        print(string.format("⏭️ #%d %s already executed this session.", i, hint))
     end
 end
 
@@ -145,21 +155,13 @@ shared.allScriptsExecutedOnce = true
 -- ================================================================
 task.delay(3, function()
     if #shared.failedScripts > 0 then
-        warn('=== ❌ FAILED SCRIPTS SUMMARY ===')
+        warn("=== ❌ FAILED SCRIPTS SUMMARY ===")
         for _, item in ipairs(shared.failedScripts) do
-            warn(string.format('• #%d %s failed', item.index, item.hint))
+            warn(string.format("• #%d %s failed", item.index, item.hint))
         end
-        warn(
-            string.format(
-                '=== %d / %d failed ===',
-                #shared.failedScripts,
-                #scripts
-            )
-        )
+        warn(string.format("=== %d / %d failed ===", #shared.failedScripts, #scripts))
     else
-        print(
-            string.format('✅ All %d scripts executed successfully.', #scripts)
-        )
+        print(string.format("✅ All %d scripts executed successfully.", #scripts))
     end
 end)
 
