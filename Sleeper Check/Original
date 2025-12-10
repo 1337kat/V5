@@ -1,0 +1,180 @@
+--========================================================--
+--   HYBRID SLEEPER ESP
+--   • One-time GC bootstrap for existing states
+--   • Constructor hook for future sleeper tables
+--   • Single ultra-light RenderStepped loop
+--========================================================--
+
+local RS   = game:GetService("RunService")
+local Cam  = workspace.CurrentCamera
+
+--===========================
+-- Re-exec cleanup
+--===========================
+do
+    if getgenv().SLEEPER_ESP_DRAW then
+        for _, d in ipairs(getgenv().SLEEPER_ESP_DRAW) do
+            pcall(function() d:Remove() end)
+        end
+    end
+    getgenv().SLEEPER_ESP_DRAW  = {}
+    if getgenv().SLEEPER_ESP_CONN then
+        pcall(function() getgenv().SLEEPER_ESP_CONN:Disconnect() end)
+    end
+end
+
+--===========================
+-- Caches / structures
+--===========================
+local HEAD_OFFSET      = Vector3.new(0, 2, 0)
+
+-- Numeric array for fast iteration
+local sleepers = {}    -- { { state = <table>, head = Instance, draw = Drawing } , ... }
+local indexByState = {}-- [stateTable] = index in sleepers[]
+
+--========================================================--
+--  Helper: attach a state table into sleeper list
+--========================================================--
+local function attachSleeperState(state)
+    if indexByState[state] then
+        return -- already tracked
+    end
+
+    local model = state.model
+    if not model then
+        return
+    end
+
+    local head = model:FindFirstChild("Head")
+    if not head then
+        return
+    end
+
+    -- Create drawing ONCE; we can just hide/show based on sleeping
+    local d = Drawing.new("Text")
+    d.Text     = "SLEEPER"
+    d.Size     = 16
+    d.Center   = true
+    d.Outline  = true
+    d.Color    = Color3.fromRGB(255, 70, 70)
+    d.Visible  = false -- only show when sleeping is true
+
+    table.insert(getgenv().SLEEPER_ESP_DRAW, d)
+
+    local idx = #sleepers + 1
+    sleepers[idx] = {
+        state = state,
+        head  = head,
+        draw  = d,
+    }
+    indexByState[state] = idx
+end
+
+--========================================================--
+--  STEP 1: BOOTSTRAP — one-time GC scan for existing states
+--========================================================--
+for _, v in next, getgc(true) do
+    if type(v) == "table"
+       and rawget(v, "sleeping") ~= nil
+       and rawget(v, "model") ~= nil
+    then
+        -- We track ALL of them now, sleeping or not.
+        -- Drawing stays hidden unless sleeping == true
+        attachSleeperState(v)
+    end
+end
+
+--========================================================--
+--  STEP 2: CONSTRUCTOR HOOK — future sleeper states
+--========================================================--
+-- NOTE:
+--  This part is heuristic and depends on your executor:
+--  requires islclosure, debug.getconstants, hookfunction to exist.
+--  It tries to find a function that *creates or manages* sleeper tables.
+
+local function safeGetConstants(fn)
+    local ok, consts = pcall(function()
+        return debug.getconstants(fn)
+    end)
+    return ok and consts or nil
+end
+
+local candidateCtor = nil
+
+for _, fn in next, getgc(true) do
+    if type(fn) == "function" and islclosure and islclosure(fn) then
+        local consts = safeGetConstants(fn)
+        if consts then
+            local hasSleeping, hasModel = false, false
+
+            for _, c in ipairs(consts) do
+                if c == "sleeping" then
+                    hasSleeping = true
+                elseif c == "model" then
+                    hasModel = true
+                end
+                if hasSleeping and hasModel then
+                    candidateCtor = fn
+                    break
+                end
+            end
+        end
+        if candidateCtor then break end
+    end
+end
+
+if candidateCtor and hookfunction then
+    local old = nil
+    old = hookfunction(candidateCtor, function(...)
+        -- Call original
+        local result = old(...)
+
+        -- If it looks like our sleeper state, track it
+        if type(result) == "table"
+           and rawget(result, "sleeping") ~= nil
+           and rawget(result, "model") ~= nil
+        then
+            attachSleeperState(result)
+        end
+
+        return result
+    end)
+else
+    -- Fallback: no constructor hook found / supported
+    -- (You still get the one-time GC bootstrap + render loop.)
+end
+
+--========================================================--
+--  STEP 3: ZERO-FUSS RENDERSTEPPED LOOP
+--========================================================--
+local conn = RS.RenderStepped:Connect(function()
+    -- Numeric for-loop = faster than pairs.
+    for i = 1, #sleepers do
+        local entry = sleepers[i]
+        local state = entry.state
+        local head  = entry.head
+        local draw  = entry.draw
+
+        -- Skip if table somehow died
+        if not state or not head or not head.Parent then
+            draw.Visible = false
+            continue
+        end
+
+        -- Only show when sleeping is true
+        if state.sleeping ~= true then
+            draw.Visible = false
+            continue
+        end
+
+        local pos, onScreen = Cam:WorldToViewportPoint(head.Position + HEAD_OFFSET)
+        if onScreen then
+            draw.Position = Vector2.new(pos.X, pos.Y)
+            draw.Visible  = true
+        else
+            draw.Visible  = false
+        end
+    end
+end)
+
+getgenv().SLEEPER_ESP_CONN = conn
