@@ -373,30 +373,49 @@ end)
 
 
 
-
--- Throwable Objects
+-- Throwable objects
 task.spawn(function() -- << ISOLATED BUBBLE >>
 
-    local partials = {
-        "flash",
-        "c4",
-        "grenade",
-        "molotov",
-        "handmade charge",
+    -- Keys we look for in the name / callsign / displayname
+    local targets = {
+        grenade   = true,
+        flash     = true,
+        flashbang = true,
+        c4        = true,
+        dynamite  = true,
+        molotov   = true,
+        ["handmade charge"] = true,
     }
 
-    for _, v in pairs(getgc(true)) do
-        if type(v) == "table"
-            and rawget(v, "AttackCooldown")
-            and v.Callsign
-        then
-            local name = tostring(v.Callsign):lower()
+    -- Check if a string contains any throwable keyword
+    local function isThrowableString(str)
+        if not str then return false end
+        str = tostring(str):lower()
+        for key in pairs(targets) do
+            if str:find(key) then
+                return true
+            end
+        end
+        return false
+    end
 
-            for _, ref in ipairs(partials) do
-                if name:find(ref) then
-                    v.AttackCooldown = 0
-                    break
-                end
+    for _, obj in ipairs(getgc(true)) do
+        if type(obj) == "table" and rawget(obj, "AttackCooldown") then
+
+            -- Combine all identity fields into one check
+            local id =
+                rawget(obj, "Name") or
+                rawget(obj, "Callsign") or
+                rawget(obj, "DisplayName")
+
+            if isThrowableString(id) then
+                -- Patch cooldown
+                obj.AttackCooldown = 0
+
+                -- Optional but recommended for “feel”
+                if rawget(obj, "ThrowTime") then obj.ThrowTime = 0 end
+                if rawget(obj, "Windup")    then obj.Windup    = 0 end
+                if rawget(obj, "FuseTime")  then obj.FuseTime  = 0 end
             end
         end
     end
