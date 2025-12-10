@@ -1,0 +1,236 @@
+--========================================================--
+--    HIGH FPS AWAKE-ONLY AWARENESS + HEAD-LOCKED TRIANGLES
+--========================================================--
+
+local Players      = game:GetService("Players")
+local RunService   = game:GetService("RunService")
+local Workspace    = game:GetService("Workspace")
+local LocalPlayer  = Players.LocalPlayer
+
+local Const          = Workspace:WaitForChild("Const")
+local Ignore         = Const:WaitForChild("Ignore")
+local LocalCharacter = Ignore:WaitForChild("LocalCharacter")
+
+--========================================================--
+--     CACHE GC STATE TABLES (AWAKE / SLEEPING)
+--========================================================--
+local AwakeState = {}   -- [model] = stateTable
+
+for _, t in next, getgc(true) do
+    if typeof(t) == "table"
+        and rawget(t, "model")
+        and rawget(t, "sleeping") ~= nil
+    then
+        AwakeState[rawget(t, "model")] = t
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(obj)
+    if not obj:IsA("Model") or not obj:FindFirstChild("Head") then return end
+    task.defer(function()
+        for _, t in next, getgc(true) do
+            if typeof(t) == "table"
+                and rawget(t, "model") == obj
+                and rawget(t, "sleeping") ~= nil
+            then
+                AwakeState[obj] = t
+                break
+            end
+        end
+    end)
+end)
+
+--========================================================--
+--     CONFIG
+--========================================================--
+local FOV_ANGLE      = 45
+local MAX_DIST       = 300
+local PERSIST_TIME   = 1.5
+local THREAT_MIN     = 0.01
+
+local ANGLE_WEIGHT   = 0.4
+local DIST_WEIGHT    = 0.25
+local PERSIST_WEIGHT = 0.35
+
+--========================================================--
+-- CLEANUP
+--========================================================--
+if getgenv().A_TRI then 
+    for _,v in ipairs(getgenv().A_TRI) do pcall(function() v:Remove() end) end
+end
+if getgenv().A_TRI_CONN then pcall(function() getgenv().A_TRI_CONN:Disconnect() end) end
+if getgenv().A_CONN then pcall(function() getgenv().A_CONN:Disconnect() end) end
+if getgenv().A_WARN then pcall(function() getgenv().A_WARN:Remove() end) end
+
+getgenv().A_TRI = {}
+
+--========================================================--
+-- UTIL
+--========================================================--
+local function getHead(model)
+    return model:FindFirstChild("Head")
+end
+
+local function angleTo(fromCF, toPos)
+    local dir = (toPos - fromCF.Position)
+    if dir.Magnitude < 1e-6 then return 180 end
+    local dot = math.clamp(fromCF.LookVector:Dot(dir.Unit), -1, 1)
+    return math.deg(math.acos(dot))
+end
+
+--========================================================--
+-- WARNING TEXT
+--========================================================--
+local warn = Drawing.new("Text")
+warn.Size = 32
+warn.Center = true
+warn.Outline = true
+warn.OutlineColor = Color3.new(0,0,0)
+warn.Font = 2
+warn.Visible = false
+getgenv().A_WARN = warn
+
+local watchers = {}
+local cam = Workspace.CurrentCamera
+
+--========================================================--
+-- MAIN THREAT LOOP (Heartbeat → fastest updates)
+--========================================================--
+getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
+    local char = LocalCharacter
+    if not char then return end
+
+    local myPart = char.PrimaryPart or char:FindFirstChild("Middle") or char:FindFirstChildWhichIsA("BasePart")
+    if not myPart then return end
+    local myPos = myPart.Position
+
+    warn.Position = Vector2.new(cam.ViewportSize.X/2, 40)
+    local now = os.clock()
+
+    -- Scan only awake players
+    for model, state in pairs(AwakeState) do
+        if state.sleeping ~= false or not model.Parent then
+            watchers[model] = nil
+            continue
+        end
+
+        local head = getHead(model)
+        if not head then continue end
+
+        local dist = (head.Position - myPos).Magnitude
+        if dist > MAX_DIST * 1.5 then continue end
+
+        watchers[model] = watchers[model] or { lookTime = 0, lastSeen = now, threat = 0 }
+        local info = watchers[model]
+
+        local angle = angleTo(head.CFrame, myPos)
+        local facing = angle <= FOV_ANGLE
+
+        if facing then
+            info.lookTime = math.min(info.lookTime + dt, PERSIST_TIME * 2)
+            info.lastSeen = now
+
+            local angleScore   = 1 - math.clamp(angle / FOV_ANGLE, 0, 1)
+            local distScore    = 1 - math.clamp(dist  / MAX_DIST, 0, 1)
+            local persistScore = math.clamp(info.lookTime / PERSIST_TIME, 0, 1)
+
+            info.threat = math.clamp(
+                angleScore   * ANGLE_WEIGHT +
+                distScore    * DIST_WEIGHT +
+                persistScore * PERSIST_WEIGHT,
+                0, 1
+            )
+        else
+            info.lookTime = math.max(0, info.lookTime - dt * 2)
+            info.threat   = math.max(0, info.threat   - dt * 0.5)
+        end
+    end
+
+    -- Prune dead/low-threat entries
+    for model, info in pairs(watchers) do
+        if not model.Parent or (now - info.lastSeen > 10 and info.threat <= THREAT_MIN) then
+            watchers[model] = nil
+        end
+    end
+
+    -- Top-center warning
+    local highest = 0
+    for _, info in pairs(watchers) do highest = math.max(highest, info.threat) end
+
+    if highest >= 0.75 then
+        warn.Visible = true
+        warn.Text = "HIGH THREAT - YOU ARE BEING WATCHED!"
+        warn.Color = Color3.new(1,0,0)
+        warn.Size = 36
+    elseif highest >= 0.4 then
+        warn.Visible = true
+        warn.Text = "MEDIUM THREAT DETECTED"
+        warn.Color = Color3.new(1,0.85,0)
+        warn.Size = 32
+    elseif highest > THREAT_MIN then
+        warn.Visible = true
+        warn.Text = "Low threat nearby"
+        warn.Color = Color3.new(1,1,1)
+        warn.Size = 28
+    else
+        warn.Visible = false
+    end
+end)
+
+--========================================================--
+-- TRIANGLES — NOW PERFECTLY ABOVE HEAD (AWAKE ONLY)
+--========================================================--
+local function createTriangle()
+    local a = Drawing.new("Line")
+    local b = Drawing.new("Line")
+    local c = Drawing.new("Line")
+    a.Thickness = 3; b.Thickness = 3; c.Thickness = 3
+    a.Visible = true; b.Visible = true; c.Visible = true
+    table.insert(getgenv().A_TRI, a)
+    table.insert(getgenv().A_TRI, b)
+    table.insert(getgenv().A_TRI, c)
+    return a, b, c
+end
+
+getgenv().A_TRI_CONN = RunService.RenderStepped:Connect(function()
+    -- Clean old drawings
+    for _, d in ipairs(getgenv().A_TRI) do pcall(function() d:Remove() end) end
+    table.clear(getgenv().A_TRI)
+
+    for model, info in pairs(watchers) do
+        if info.threat <= THREAT_MIN then continue end
+
+        local head = getHead(model)
+        if not head then continue end
+
+        -- THIS LINE IS THE FIX → raises triangle above the head exactly like the first script
+        local screenPos, onScreen = cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+        if not onScreen then continue end
+
+        local t = info.threat
+        local size, col
+
+        if t >= 0.75 then
+            size = 42
+            col  = Color3.new(1, 0.1, 0.1)      -- Red = staring
+        elseif t >= 0.4 then
+            size = 28
+            col  = Color3.new(1, 0.85, 0.1)     -- Yellow = watching
+        else
+            size = 20
+            col  = Color3.new(0.9, 0.95, 1)     -- Light blue/white = glancing
+        end
+
+        local top   = Vector2.new(screenPos.X, screenPos.Y - size * 0.8)
+        local left  = Vector2.new(screenPos.X - size * 0.7, screenPos.Y + size * 0.5)
+        local right = Vector2.new(screenPos.X + size * 0.7, screenPos.Y + size * 0.5)
+
+        local A, B, C = createTriangle()
+        A.From = left;  A.To = top;    A.Color = col
+        B.From = top;   B.To = right;  B.Color = col
+        C.From = right; C.To = left;   C.Color = col
+    end
+end)
+
+print("Awake-Only Awareness + Head-Locked Triangles Loaded!")
+print("White = glancing | Yellow = watching | Red = STARING AT YOU")
