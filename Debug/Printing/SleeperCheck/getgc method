@@ -1,0 +1,10 @@
+for _, v in next, getgc(true) do
+    if type(v) == "table" then
+        if rawget(v, "sleeping") ~= nil then
+            print("\n===== SLEEPER TABLE FOUND =====")
+            for k, val in pairs(v) do
+                print(k, val)
+            end
+        end
+    end
+end
