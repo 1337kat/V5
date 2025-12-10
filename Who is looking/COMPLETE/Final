@@ -1,3 +1,5 @@
+-- WHOS LOOKING / Who is looking/ Who is Watching
+-- WHOS LOOKING / Who is looking / Who is Watching
 task.spawn(function()
 --========================================================--
 --          ULTIMATE AWAKE-ONLY ESP + THREAT TRIANGLES
@@ -11,7 +13,7 @@ local Workspace    = game:GetService("Workspace")
 
 local Const        = Workspace:WaitForChild("Const")
 local Ignore       = Const:WaitForChild("Ignore")
-local LocalChar   = Ignore:WaitForChild("LocalCharacter")
+local LocalChar    = Ignore:WaitForChild("LocalCharacter")
 local Cam          = Workspace.CurrentCamera
 
 --========================================================--
@@ -25,7 +27,7 @@ end
 getgenv().ULTIMATE_ESP = {
     drawings = {},
     connections = {},
-    tracked = {},      -- [model] = { root, head, label, threatInfo }
+    tracked = {},      -- [model] = { root, head, label, tri, threat }
 }
 
 local T = getgenv().ULTIMATE_ESP.tracked
@@ -33,7 +35,7 @@ local D = getgenv().ULTIMATE_ESP.drawings
 local C = getgenv().ULTIMATE_ESP.connections
 
 --========================================================--
--- ONE-TIME STATE COLLECTION (only once ever)
+-- ONE-TIME STATE COLLECTION
 --========================================================--
 local function isAwakeState(tbl)
     return typeof(tbl) == "table"
@@ -44,7 +46,8 @@ local function isAwakeState(tbl)
 end
 
 local function registerModel(model)
-    if T[model] or not model:FindFirstChild("HumanoidRootPart") or not model:FindFirstChild("Head") then return end
+    if T[model] then return end
+    if not (model:FindFirstChild("HumanoidRootPart") and model:FindFirstChild("Head")) then return end
 
     for _, obj in next, getgc(true) do
         if isAwakeState(obj) and obj.model == model then
@@ -52,11 +55,11 @@ local function registerModel(model)
             local root = model.HumanoidRootPart
 
             local label = Drawing.new("Text")
-            label.Size = 18
             label.Center = true
+            label.Size = 18
             label.Outline = true
-            label.Color = Color3.fromRGB(0,255,0)
             label.Font = 2
+            label.Color = Color3.fromRGB(0,255,0)
             label.Visible = false
             table.insert(D, label)
 
@@ -64,79 +67,102 @@ local function registerModel(model)
                 root = root,
                 head = head,
                 label = label,
+                tri = nil,
                 threat = { value = 0, lookTime = 0, lastSeen = os.clock() }
             }
-            print("[ULTIMATE] Now tracking:", model.Name)
+
+            print("[ULTIMATE] Tracking:", model.Name)
             return
         end
     end
 end
 
--- Initial scan (ONE TIME ONLY)
 for _, obj in next, getgc(true) do
     if isAwakeState(obj) then
         registerModel(obj.model)
     end
 end
 
-print("[ULTIMATE] Initial awake count:", #D)
-
 --========================================================--
--- LIVE MODEL DETECTION (no getgc ever again)
+-- LIVE MODEL DETECTION
 --========================================================--
 table.insert(C, Workspace.DescendantAdded:Connect(function(obj)
-    if not obj:IsA("Model") then return end
-    if not obj:FindFirstChild("HumanoidRootPart") or not obj:FindFirstChild("Head") then return end
-
-    task.wait() -- let replication finish
-    task.defer(registerModel, obj) -- will only succeed if awake state exists
+    if obj:IsA("Model") then
+        task.wait()
+        registerModel(obj)
+    end
 end))
 
 --========================================================--
 -- CONFIG
 --========================================================--
-local FOV         = 50
-local MAX_DIST    = 350
-local PERSIST     = 1.8
-local THREAT_MIN  = 0.02
+local FOV = 50
+local MAX_DIST = 350
+local PERSIST = 1.8
+local THREAT_MIN = 0.02
 
 --========================================================--
--- THREAT WARNING
+-- GLOBAL WARNING TEXT
 --========================================================--
 local warn = Drawing.new("Text")
-warn.Size = 36
 warn.Center = true
+warn.Size = 36
 warn.Outline = true
 warn.Font = 2
 warn.Position = Vector2.new(Cam.ViewportSize.X/2, 50)
+warn.Visible = false
 table.insert(D, warn)
 
 --========================================================--
--- RENDER + THREAT LOOP (RenderStepped = max smoothness)
---==========================================================
+-- MAIN LOOP (RENDERSTEPPED)
+--========================================================--
 table.insert(C, RunService.RenderStepped:Connect(function(dt)
     local myRoot = LocalChar and (LocalChar.PrimaryPart or LocalChar:FindFirstChildWhichIsA("BasePart"))
-    if not myRoot then warn.Visible = false return end
+    if not myRoot then
+        warn.Visible = false
+        return
+    end
     local myPos = myRoot.Position
     local now = os.clock()
-
     local highestThreat = 0
-    local anyVisible = false
 
     for model, data in pairs(T) do
+
+        --========================================================--
+        -- AUTO-REMOVE DEAD / DELETED MODELS
+        --========================================================--
         if not model.Parent or not data.head.Parent then
-            data.label.Visible = false
+
+            -- Remove triangle lines
+            if data.tri then
+                for _, line in ipairs(data.tri) do
+                    pcall(function() line:Remove() end)
+                end
+                data.tri = nil
+            end
+
+            -- Remove text label
+            pcall(function() data.label:Remove() end)
+
+            -- Delete tracking entry
             T[model] = nil
             continue
         end
 
+        --========================================================--
+        -- POSITION CALCULATION
+        --========================================================--
         local headPos = data.head.Position
         local dist = (headPos - myPos).Magnitude
-        if dist > MAX_DIST * 2 then continue end
+        if dist > MAX_DIST * 2 then
+            data.label.Visible = false
+            if data.tri then for _, l in ipairs(data.tri) do l.Visible = false end end
+            continue
+        end
 
-        -- Look vector source
-        local lookPart = model.PrimaryPart or model.UpperTorso or model.HumanoidRootPart or data.head
-        local angle = math.deg(math.acos(math.clamp(lookPart.CFrame.LookVector:Dot((myPos - lookPart.Position).Unit), -1, 1)))
+        local lookPart = model.PrimaryPart or model.HumanoidRootPart or data.head
+        local angle = math.deg(math.acos(math.clamp(
+            lookPart.CFrame.LookVector:Dot((myPos - lookPart.Position).Unit), -1, 1)))
 
         local facing = angle <= FOV
         local info = data.threat
@@ -155,17 +181,21 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
         info.value = math.clamp(aScore * 0.45 + dScore * 0.25 + pScore * 0.3, 0, 1)
         highestThreat = math.max(highestThreat, info.value)
 
-        -- ESP Label
+        --========================================================--
+        -- LABEL DRAWING
+        --========================================================--
         local screen, onScreen = Cam:WorldToViewportPoint(headPos + Vector3.new(0, 2.5, 0))
+
         if onScreen then
             data.label.Position = Vector2.new(screen.X, screen.Y)
             data.label.Visible = true
-            anyVisible = true
         else
             data.label.Visible = false
         end
 
-        -- Triangle drawer (inline, no extra table spam)
+        --========================================================--
+        -- TRIANGLE DRAWING
+        --========================================================--
         if info.value > THREAT_MIN and onScreen then
             local size = info.value > 0.75 and 45 or info.value > 0.4 and 32 or 22
             local col = info.value > 0.75 and Color3.new(1,0.1,0.1)
@@ -173,41 +203,49 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
                      or Color3.new(0.8,0.9,1)
 
             local root2D = Vector2.new(screen.X, screen.Y - size * 0.8)
-            local left  = Vector2.new(screen.X - size * 0.7, screen.Y + size * 0.5)
-            local right = Vector2.new(screen.X + size * 0.7, screen.Y + size * 0.5)
+            local left   = Vector2.new(screen.X - size * 0.7, screen.Y + size * 0.5)
+            local right  = Vector2.new(screen.X + size * 0.7, screen.Y + size * 0.5)
 
-            -- Re-use or create 3 lines per player (lazy init)
             data.tri = data.tri or {}
             local tri = data.tri
+
             for i = 1, 3 do
                 tri[i] = tri[i] or Drawing.new("Line")
-                tri[i].Thickness = 3
-                tri[i].Color = col
-                tri[i].Visible = true
-                table.insert(D, tri[i])
+                local line = tri[i]
+                line.Color = col
+                line.Thickness = 3
+                line.Visible = true
+                table.insert(D, line)
             end
 
-            tri[1].From = left;  tri[1].To = root2D
+            tri[1].From = left;   tri[1].To = root2D
             tri[2].From = root2D; tri[2].To = right
-            tri[3].From = right; tri[3].To = left
+            tri[3].From = right;  tri[3].To = left
+
         else
             if data.tri then
-                for _, line in ipairs(data.tri) do line.Visible = false end
+                for _, line in ipairs(data.tri) do
+                    line.Visible = false
+                end
             end
         end
     end
 
-    -- Warning text
+    --========================================================--
+    -- WARNING SYSTEM
+    --========================================================--
     if highestThreat >= 0.8 then
         warn.Text = "EXTREME DANGER"
         warn.Color = Color3.new(1,0,0)
         warn.Size = 42
         warn.Visible = true
+
     elseif highestThreat >= 0.55 then
         warn.Text = "BEING WATCHED"
         warn.Color = Color3.new(1,0.3,0)
         warn.Size = 38
         warn.Visible = true
+
     elseif highestThreat >= 0.25 then
         warn.Text = "Threat nearby"
         warn.Color = Color3.new(1,1,0.3)
@@ -216,8 +254,8 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
     else
         warn.Visible = false
     end
-end))
 
+end))
 
 end)
 end)
