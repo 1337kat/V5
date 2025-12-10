@@ -1,0 +1,270 @@
+--========================================================--
+--   MINIMAL AWARENESS SYSTEM (LOW / MED / HIGH TRIANGLES)
+--   • LOW → White triangle
+--   • MED → Yellow triangle + Warning
+--   • HIGH → Big red triangle + Strong warning
+--========================================================--
+
+local Players      = game:GetService("Players")
+local RunService   = game:GetService("RunService")
+local Workspace    = game:GetService("Workspace")
+local LocalPlayer  = Players.LocalPlayer
+
+--========================================================--
+-- LOCAL CHARACTER FIX (GAME USES CUSTOM CONTAINER)
+--========================================================--
+local Const          = Workspace:WaitForChild("Const")
+local Ignore         = Const:WaitForChild("Ignore")
+local LocalCharacter = Ignore:WaitForChild("LocalCharacter")
+
+-- CONFIG
+local FOV_ANGLE      = 45
+local MAX_DIST       = 300  -- Increased for survival game
+local PERSIST_TIME   = 1.5  -- Faster buildup
+local THREAT_MIN     = 0.01
+
+local ANGLE_WEIGHT   = 0.4
+local DIST_WEIGHT    = 0.25
+local PERSIST_WEIGHT = 0.35
+
+-- CLEANUP
+if getgenv().A_TRI then 
+    for _,v in ipairs(getgenv().A_TRI) do 
+        pcall(function() v:Remove() end) 
+    end 
+end
+if getgenv().A_TRI_CONN then 
+    pcall(function() getgenv().A_TRI_CONN:Disconnect() end) 
+end
+if getgenv().A_CONN then 
+    pcall(function() getgenv().A_CONN:Disconnect() end) 
+end
+if getgenv().A_WARN then 
+    pcall(function() getgenv().A_WARN:Remove() end) 
+end
+
+getgenv().A_TRI = {}
+
+--========================================================--
+--   HEAD LOOKUP (HEAD ONLY REQUIRED)
+--========================================================--
+local function getHead(model)
+    if model and model:IsA("Model") then
+        local head = model:FindFirstChild("Head")
+        if head then
+            return head
+        end
+    end
+    return nil
+end
+
+-- UTIL
+local function angleTo(fromCF, toPos)
+    local look = fromCF.LookVector
+    local dir = (toPos - fromCF.Position)
+    local m = dir.Magnitude
+    if m < 1e-6 then return 180 end
+    dir = dir.Unit
+    local dot = math.clamp(look:Dot(dir), -1, 1)
+    return math.deg(math.acos(dot))
+end
+
+local function lerpColor(c1, c2, t)
+    return Color3.new(
+        c1.R + (c2.R - c1.R) * t,
+        c1.G + (c2.G - c1.G) * t,
+        c1.B + (c2.B - c1.B) * t
+    )
+end
+
+-- WATCHERS
+local watchers = {}
+
+--========================================================--
+--   TOP-CENTER WARNING TEXT
+--========================================================--
+local warn = Drawing.new("Text")
+warn.Size = 32
+warn.Center = true
+warn.Outline = true
+warn.OutlineColor = Color3.new(0,0,0)
+warn.Font = 2
+warn.Visible = false
+getgenv().A_WARN = warn
+
+--========================================================--
+--   MAIN THREAT LOOP
+--========================================================--
+getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
+
+    -- self = LocalCharacter
+    local char = LocalCharacter
+    if not char then return end
+
+    -- FIX: Use Middle or PrimaryPart instead of Head
+    local myPart = char.PrimaryPart or char:FindFirstChild("Middle") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
+    if not myPart then return end
+    local myPos = myPart.Position
+
+    local cam = Workspace.CurrentCamera
+    warn.Position = Vector2.new(cam.ViewportSize.X / 2, 40)
+
+    local now = os.clock()
+
+    --====================================================--
+    -- SCAN ENTITIES (WORKSPACE CHILDREN = PLAYERS IN TRIDENT SURVIVAL)
+    -- Added LowerTorso check for valid player models
+    --====================================================--
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if not obj:IsA("Model") then continue end
+        if not obj:FindFirstChild("Head") or not obj:FindFirstChild("LowerTorso") then continue end  -- Valid player
+        if (obj:GetDebugId() == char:GetDebugId()) then continue end  -- Rare self match
+
+        local otherHead = getHead(obj)
+        if not otherHead then continue end
+
+        local distCheck = (otherHead.Position - myPos).Magnitude
+        if distCheck > MAX_DIST * 1.5 then continue end  -- Early dist cull
+
+        if not watchers[obj] then
+            watchers[obj] = { lookTime = 0, lastSeen = now, threat = 0 }
+        end
+
+        local info = watchers[obj]
+        local angle = angleTo(otherHead.CFrame, myPos)
+        local dist  = distCheck
+        local facing = angle <= FOV_ANGLE
+
+        if facing then
+            info.lookTime = math.min(info.lookTime + dt, PERSIST_TIME * 2)
+            info.lastSeen = now
+
+            local angleScore   = 1 - math.clamp(angle / FOV_ANGLE, 0, 1)
+            local distScore    = 1 - math.clamp(dist / MAX_DIST, 0, 1)
+            local persistScore = math.clamp(info.lookTime / PERSIST_TIME, 0, 1)
+
+            info.threat = math.clamp(
+                angleScore   * ANGLE_WEIGHT +
+                distScore    * DIST_WEIGHT +
+                persistScore * PERSIST_WEIGHT, 0, 1
+            )
+
+        else
+            info.lookTime = math.max(0, info.lookTime - dt * 2)  -- Faster decay when not looking
+            info.threat  = math.max(0, info.threat  - dt * 0.5)
+        end
+    end
+
+    -- prune removed objects / low threat
+    for obj, info in pairs(watchers) do
+        if not obj.Parent or (now - info.lastSeen > 10 and info.threat <= THREAT_MIN) then
+            watchers[obj] = nil
+        end
+    end
+
+    -- highest threat
+    local topThreat = 0
+    for _, info in pairs(watchers) do
+        topThreat = math.max(topThreat, info.threat)
+    end
+
+    --========================================================--
+    -- WARNING LOGIC
+    --========================================================--
+    if topThreat >= 0.75 then
+        warn.Text = "HIGH THREAT - YOU ARE BEING WATCHED!"
+        warn.Color = Color3.new(1, 0, 0)
+        warn.Size = 36
+        warn.Visible = true
+
+    elseif topThreat >= 0.4 then
+        warn.Text = "MEDIUM THREAT DETECTED"
+        warn.Color = Color3.new(1, 0.85, 0)
+        warn.Size = 32
+        warn.Visible = true
+
+    elseif topThreat > THREAT_MIN then
+        warn.Text = "Low threat nearby"
+        warn.Color = Color3.new(1, 1, 1)
+        warn.Size = 28
+        warn.Visible = true
+
+    else
+        warn.Visible = false
+    end
+end)
+
+--========================================================--
+--   TRIANGLE INDICATORS (LOW / MED / HIGH)
+--========================================================--
+local cam = Workspace.CurrentCamera
+
+local function triangleLines()
+    local a = Drawing.new("Line")
+    local b = Drawing.new("Line")
+    local c = Drawing.new("Line")
+    a.Thickness = 3
+    b.Thickness = 3
+    c.Thickness = 3
+    a.Visible = true
+    b.Visible = true
+    c.Visible = true
+    table.insert(getgenv().A_TRI, a)
+    table.insert(getgenv().A_TRI, b)
+    table.insert(getgenv().A_TRI, c)
+    return a,b,c
+end
+
+getgenv().A_TRI_CONN = RunService.RenderStepped:Connect(function()
+    -- CLEANUP
+    for _, d in ipairs(getgenv().A_TRI) do 
+        pcall(function() d:Remove() end) 
+    end
+    table.clear(getgenv().A_TRI)
+
+    local char = LocalCharacter
+    if not char then return end
+    local myPart = char.PrimaryPart or char:FindFirstChild("Middle") or char:FindFirstChildWhichIsA("BasePart")
+    if not myPart then return end
+    local myPos = myPart.Position
+
+    for model, info in pairs(watchers) do
+        if info.threat <= THREAT_MIN then continue end
+
+        local head = getHead(model)
+        if not head then continue end
+
+        local pos, vis = cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+        if not vis then continue end
+
+        local t = info.threat
+
+        local size, col, outline = 0, Color3.new(1,1,1), Color3.new(0,0,0)
+
+        if t >= 0.75 then
+            size = 42
+            col = Color3.new(1, 0.1, 0.1)
+
+        elseif t >= 0.4 then
+            size = 28
+            col = Color3.new(1, 0.85, 0.1)
+
+        else
+            size = 20
+            col = Color3.new(0.9, 0.95, 1)
+        end
+
+        local top  = Vector2.new(pos.X, pos.Y - size * 0.8)
+        local left = Vector2.new(pos.X - size * 0.7, pos.Y + size * 0.5)
+        local right= Vector2.new(pos.X + size * 0.7, pos.Y + size * 0.5)
+
+        local A,B,C = triangleLines()
+
+        A.From = left;  A.To = top;   A.Color = col; A.Transparency = 1
+        B.From = top;   B.To = right; B.Color = col; B.Transparency = 1
+        C.From = right; C.To = left;  C.Color = col; C.Transparency = 1
+    end
+end)
+
+print("✅ Trident Survival Awareness Loaded - Triangles show who is LOOKING at you!")
+print("White=Glancing | Yellow=Watching | Red=Staring (Kill them!)")
