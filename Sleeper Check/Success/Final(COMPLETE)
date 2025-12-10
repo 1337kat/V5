@@ -1,0 +1,129 @@
+--========================================================--
+--    HYBRID AWAKE/SLEEPER ESP (EXTREME PERFORMANCE)
+--    • One-time GC builder
+--    • DescendantAdded auto-detection
+--    • Micro-scan only when model appears
+--========================================================--
+
+local RS = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Cam = Workspace.CurrentCamera
+
+-- cleanup
+if getgenv().U_DRAW then
+    for _, d in ipairs(getgenv().U_DRAW) do pcall(d.Remove, d) end
+end
+getgenv().U_DRAW = {}
+local drawings = getgenv().U_DRAW
+
+if getgenv().U_TRACKED then
+    table.clear(getgenv().U_TRACKED)
+end
+
+getgenv().U_TRACKED = {}
+local tracked = getgenv().U_TRACKED
+
+local ROOT_OFFSET = Vector3.new(0, 3, 0)
+
+--========================================================--
+--  LABEL CREATION
+--========================================================--
+local function makeLabel()
+    local t = Drawing.new("Text")
+    t.Size = 20
+    t.Center = true
+    t.Outline = true
+    t.OutlineColor = Color3.fromRGB(0,0,0)
+    t.Visible = false
+    table.insert(drawings, t)
+    return t
+end
+
+--========================================================--
+--  TRY TO ATTACH A STATE TABLE
+--========================================================--
+local function attachState(state)
+    if tracked[state] then return end
+    local model = rawget(state, "model")
+    if typeof(model) ~= "Instance" then return end
+
+    local root = model:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    tracked[state] = {
+        root = root,
+        model = model,
+        draw = makeLabel()
+    }
+end
+
+--========================================================--
+--  INITIAL BUILDER: FIND ALL EXISTING STATES
+--========================================================--
+getgenv().STATE_LIST = {}
+
+for _, t in next, getgc(true) do
+    if type(t) == "table" then
+        if rawget(t, "sleeping") ~= nil
+            and typeof(rawget(t, "model")) == "Instance"
+            and rawget(t, "type") == "Player" then
+
+            table.insert(getgenv().STATE_LIST, t)
+            attachState(t)
+        end
+    end
+end
+
+print("INITIAL FOUND:", #getgenv().STATE_LIST, "STATES")
+
+--========================================================--
+--  DESCENDANTADDED → FIND MATCHING STATE TABLE
+--========================================================--
+Workspace.DescendantAdded:Connect(function(obj)
+    if not obj:IsA("Model") then return end
+    if not obj:FindFirstChild("HumanoidRootPart") then return end
+
+    -- micro-scan
+    for _, t in next, getgc(true) do
+        if type(t) == "table"
+            and rawget(t, "model") == obj
+            and rawget(t, "sleeping") ~= nil then
+            
+            attachState(t)
+            print("NEW STATE ATTACHED:", obj.Name)
+            break
+        end
+    end
+end)
+
+--========================================================--
+--  RENDER LOOP
+--========================================================--
+RS.RenderStepped:Connect(function()
+    for state, info in next, tracked do
+        local root = info.root
+        local draw = info.draw
+
+        if not root or not root:IsDescendantOf(Workspace) then
+            draw.Visible = false
+            continue
+        end
+
+        -- sleeping state
+        if state.sleeping == true then
+            draw.Text = "SLEEPER"
+            draw.Color = Color3.fromRGB(255,255,255)
+        elseif state.sleeping == false then
+            draw.Text = "AWAKE"
+            draw.Color = Color3.fromRGB(0,255,0)
+        end
+
+        local pos, ok = Cam:WorldToViewportPoint(root.Position + ROOT_OFFSET)
+        if ok and pos.Z > 0 then
+            draw.Position = Vector2.new(pos.X, pos.Y)
+            draw.Visible = true
+        else
+            draw.Visible = false
+        end
+    end
+end)
