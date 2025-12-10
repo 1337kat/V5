@@ -1,0 +1,168 @@
+--========================================================--
+--     SMART SLEEPER ESP (MINIMAL + FUTURE ENTITIES)
+--     • Uses internal `sleeping` GC state
+--     • One-time GC seed + event-based rescans
+--========================================================--
+
+local RunService = game:GetService("RunService")
+local Workspace  = game:GetService("Workspace")
+local Camera     = Workspace.CurrentCamera
+
+--========================================================--
+--  CLEANUP (RE-EXEC SAFE)
+--========================================================--
+do
+    if getgenv().SLEEPER_ESP_LABELS then
+        for _, lbl in pairs(getgenv().SLEEPER_ESP_LABELS) do
+            pcall(function() lbl:Remove() end)
+        end
+    end
+    getgenv().SLEEPER_ESP_LABELS = {}
+
+    if getgenv().SLEEPER_ESP_CONN then
+        pcall(function() getgenv().SLEEPER_ESP_CONN:Disconnect() end)
+    end
+
+    if getgenv().SLEEPER_ESP_SCAN_CONN then
+        pcall(function() getgenv().SLEEPER_ESP_SCAN_CONN:Disconnect() end)
+    end
+end
+
+--========================================================--
+--  INTERNAL STATE
+--========================================================--
+local HEAD_OFFSET = Vector3.new(0, 2.5, 0)
+
+-- trackedStates: array of entries
+--   { state = <table>, model = <Model>, head = <BasePart> }
+local trackedStates = {}
+local trackedSet    = {}   -- state table → entry
+
+local labels = {}
+getgenv().SLEEPER_ESP_LABELS = labels
+
+--========================================================--
+--  DRAWING FACTORY
+--========================================================--
+local function newLabel()
+    local d = Drawing.new("Text")
+    d.Text    = "SLEEPER"
+    d.Size    = 18
+    d.Center  = true
+    d.Outline = true
+    d.Color   = Color3.fromRGB(255, 70, 70)
+    d.Visible = false
+    table.insert(labels, d)
+    return d
+end
+
+--========================================================--
+--  REGISTER A STATE TABLE AS A SLEEPER CANDIDATE
+--========================================================--
+local function registerState(state)
+    if trackedSet[state] then return end
+    if type(state) ~= "table" then return end
+
+    -- Must look like a sleeper state
+    if rawget(state, "sleeping") == nil then return end
+    if rawget(state, "type") ~= "Player" then return end
+
+    local model = rawget(state, "model")
+    if typeof(model) ~= "Instance" or not model:IsDescendantOf(Workspace) then return end
+
+    local head = model:FindFirstChild("Head")
+    if not head then return end
+
+    local entry = {
+        state = state,
+        model = model,
+        head  = head,
+    }
+    trackedSet[state] = entry
+    table.insert(trackedStates, entry)
+end
+
+--========================================================--
+--  1) BOOTSTRAP — ONE-TIME GC SCAN (YOUR ORIGINAL LOGIC)
+--========================================================--
+for _, t in next, getgc(true) do
+    if type(t) == "table"
+        and rawget(t, "sleeping") ~= nil
+        and rawget(t, "type") == "Player"
+    then
+        registerState(t)
+    end
+end
+
+--========================================================--
+--  HELPER: RESCAN GC FOR A SPECIFIC MODEL
+--  (Called when a new Model appears that looks like a character)
+--========================================================--
+local function rescanForModel(targetModel)
+    -- Cheap guard so we don't hammer GC many times per frame
+    if not targetModel:IsDescendantOf(Workspace) then return end
+
+    for _, t in next, getgc(true) do
+        if type(t) == "table"
+            and rawget(t, "sleeping") ~= nil
+            and rawget(t, "type") == "Player"
+            and rawget(t, "model") == targetModel
+        then
+            registerState(t)
+        end
+    end
+end
+
+--========================================================--
+--  2) EVENT-DRIVEN EXPANSION:
+--     When a new character model appears, try to link it.
+--========================================================--
+getgenv().SLEEPER_ESP_SCAN_CONN = Workspace.DescendantAdded:Connect(function(obj)
+    -- Tune this filter as needed for your game:
+    if not obj:IsA("Model") then return end
+    if not obj:FindFirstChild("Head") then return end
+
+    -- Optional: require Humanoid if the game uses it
+    -- if not obj:FindFirstChildOfClass("Humanoid") then return end
+
+    -- New potential entity → see if any GC state table points to it
+    rescanForModel(obj)
+end)
+
+--========================================================--
+--  3) RENDER LOOP (MINIMAL, LIKE YOUR ORIGINAL)
+--========================================================--
+getgenv().SLEEPER_ESP_CONN = RunService.RenderStepped:Connect(function()
+    for _, entry in ipairs(trackedStates) do
+        local state = entry.state
+        local head  = entry.head
+
+        if not state or not head or not head.Parent then
+            -- hide its label if we made one
+            local lbl = labels[state]
+            if lbl then lbl.Visible = false end
+            continue
+        end
+
+        if state.sleeping == true then
+            local lbl = labels[state]
+            if not lbl then
+                lbl = newLabel()
+                labels[state] = lbl
+            end
+
+            local pos, onScreen = Camera:WorldToViewportPoint(head.Position + HEAD_OFFSET)
+            if onScreen then
+                lbl.Position = Vector2.new(pos.X, pos.Y)
+                lbl.Visible  = true
+            else
+                lbl.Visible  = false
+            end
+        else
+            local lbl = labels[state]
+            if lbl then
+                lbl.Visible = false
+            end
+        end
+    end
+end)
