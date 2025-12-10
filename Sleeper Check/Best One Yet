@@ -1,0 +1,115 @@
+--========================================================--
+--  ULTRA-FPS SLEEPER ESP (EVENT-DRIVEN, ZERO GC POLLING)
+--========================================================--
+
+local RS        = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Cam       = Workspace.CurrentCamera
+
+-- Cleanup
+if getgenv().S_FAST_DRAW then
+    for _, d in ipairs(getgenv().S_FAST_DRAW) do pcall(d.Remove, d) end
+end
+getgenv().S_FAST_DRAW = {}
+
+local drawings = getgenv().S_FAST_DRAW
+local tracked = {}      -- [stateTable] = { head, model, draw }
+
+local HEAD_OFFSET = Vector3.new(0, 2, 0)
+
+--========================================================--
+--  Create drawing
+--========================================================--
+local function makeLabel()
+    local t = Drawing.new("Text")
+    t.Text = "SLEEPER"
+    t.Size = 18
+    t.Center = true
+    t.Outline = true
+    t.Color = Color3.fromRGB(255, 70, 70)
+    t.Transparency = 0
+    t.Visible = false
+    table.insert(drawings, t)
+    return t
+end
+
+--========================================================--
+--  Try attach sleeper RECORD (safe read-only)
+--========================================================--
+local function attachState(state)
+    if tracked[state] then return end
+    if rawget(state, "sleeping") == nil then return end
+    if rawget(state, "type") ~= "Player" then return end
+
+    local model = rawget(state, "model")
+    if typeof(model) ~= "Instance" then return end
+
+    local head = model:FindFirstChild("Head")
+    if not head then return end
+
+    tracked[state] = {
+        head = head,
+        model = model,
+        draw = makeLabel()
+    }
+end
+
+
+--========================================================--
+--  INITIAL GC SCAN (one-time)
+--========================================================--
+for _, t in next, getgc(true) do
+    if type(t) == "table" then
+        attachState(t)
+    end
+end
+
+
+--========================================================--
+--  INSTANT FUTURE DETECTION:
+--  When a NEW MODEL appears, scan GC ONLY FOR THAT MODEL
+--========================================================--
+Workspace.DescendantAdded:Connect(function(obj)
+    if not obj:IsA("Model") then return end
+    if not obj:FindFirstChild("Head") then return end
+
+    -- Extremely small GC scan looking for THIS model
+    for _, t in next, getgc(true) do
+        if type(t) == "table"
+            and rawget(t, "model") == obj
+            and rawget(t, "sleeping") ~= nil
+        then
+            attachState(t)
+        end
+    end
+end)
+
+
+--========================================================--
+--  RENDERSTEPPED: micro-light, max FPS
+--========================================================--
+RS.RenderStepped:Connect(function()
+    for state, info in next, tracked do
+        local head = info.head
+        local model = info.model
+        local draw  = info.draw
+
+        if not model or not head or not model:IsDescendantOf(Workspace) then
+            draw.Visible = false
+            continue
+        end
+
+        if not state.sleeping then
+            draw.Visible = false
+            continue
+        end
+
+        local pos, ok = Cam:WorldToViewportPoint(head.Position + HEAD_OFFSET)
+        if ok and pos.Z > 0 then
+            draw.Position = Vector2.new(pos.X, pos.Y)
+            draw.Visible = true
+        else
+            draw.Visible = false
+        end
+    end
+end)
