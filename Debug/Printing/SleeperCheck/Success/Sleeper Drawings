@@ -1,0 +1,64 @@
+--========================================================--
+--     MINIMAL SLEEPER ESP (Drawing Only)
+--     Uses actual internal sleeping state from getgc
+--========================================================--
+
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+-- STEP 1: Collect all state tables that contain `sleeping = true/false`
+local sleeperStateTables = {}
+
+for _, t in next, getgc(true) do
+    if type(t) == "table" and rawget(t, "sleeping") ~= nil and rawget(t, "type") == "Player" then
+        table.insert(sleeperStateTables, t)
+    end
+end
+
+-- STEP 2: Create drawing objects per sleeper
+local sleeperESP = {}
+
+local function newLabel()
+    local d = Drawing.new("Text")
+    d.Text = "SLEEPER"
+    d.Size = 18
+    d.Center = true
+    d.Outline = true
+    d.Color = Color3.fromRGB(255, 70, 70)
+    d.Visible = true
+    return d
+end
+
+-- STEP 3: Update loop
+RunService.RenderStepped:Connect(function()
+    for _, state in ipairs(sleeperStateTables) do
+        
+        -- Only draw if sleeping
+        if state.sleeping == true then
+            local model = state.model
+            if model and model:FindFirstChild("Head") then
+
+                -- Create label if missing
+                if not sleeperESP[state] then
+                    sleeperESP[state] = newLabel()
+                end
+
+                local label = sleeperESP[state]
+                local head = model.Head
+                local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 2.5, 0))
+
+                if onScreen then
+                    label.Position = Vector2.new(screenPos.X, screenPos.Y)
+                    label.Visible = true
+                else
+                    label.Visible = false
+                end
+            end
+        else
+            -- If not a sleeper anymore, hide/remove label
+            if sleeperESP[state] then
+                sleeperESP[state].Visible = false
+            end
+        end
+    end
+end)
