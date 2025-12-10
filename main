@@ -1,10 +1,12 @@
 -- WHOS LOOKING / Who is looking/ Who is Watching
+--========================================================--
+--      HIGH FPS AWAKE-ONLY THREAT SYSTEM + TRIANGLES
+--========================================================--
 task.spawn(function()
 
 local Players      = game:GetService("Players")
 local RunService   = game:GetService("RunService")
 local Workspace    = game:GetService("Workspace")
-local LocalPlayer  = Players.LocalPlayer
 
 local Const          = Workspace:WaitForChild("Const")
 local Ignore         = Const:WaitForChild("Ignore")
@@ -25,35 +27,32 @@ if getgenv().A_WARN then pcall(function() getgenv().A_WARN:Remove() end) end
 getgenv().A_TRI = {}
 
 --========================================================--
---       STRICT AWAKE-ONLY GC STATE TABLE MAP
+-- STRICT AWAKE-ONLY STATE TABLE MAP
 --========================================================--
 local AwakeState = {}  -- [model] = stateTable
 
 local function registerStateTable(t)
     if typeof(t) ~= "table" then return end
-    local sleeping = rawget(t, "sleeping")
-    if sleeping ~= false then return end             -- AWAKE ONLY
-    if rawget(t, "type") ~= "Player" then return end -- Ignore NPC / Animal / Zombie etc.
-
+    if rawget(t, "sleeping") ~= false then return end     -- AWAKE ONLY
+    if rawget(t, "type") ~= "Player" then return end      -- Players only
     local model = rawget(t, "model")
     if typeof(model) ~= "Instance" then return end
-
     AwakeState[model] = t
 end
 
--- Initial scan
+-- Seed
 for _, t in next, getgc(true) do
     registerStateTable(t)
 end
 
--- Future detection
+-- Runtime attach
 Workspace.DescendantAdded:Connect(function(obj)
     if not obj:IsA("Model") or not obj:FindFirstChild("Head") then return end
     task.defer(function()
         for _, t in next, getgc(true) do
             if typeof(t) == "table"
                 and rawget(t, "model") == obj
-                and rawget(t, "sleeping") == false       -- strictly awake only
+                and rawget(t, "sleeping") == false
                 and rawget(t, "type") == "Player"
             then
                 AwakeState[obj] = t
@@ -78,6 +77,15 @@ local PERSIST_WEIGHT = 0.35
 --========================================================--
 -- UTIL
 --========================================================--
+local function getLookPart(model)
+    return
+        model.PrimaryPart
+        or model:FindFirstChild("Middle")
+        or model:FindFirstChild("UpperTorso")
+        or model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("Head")
+end
+
 local function getHead(model)
     return model:FindFirstChild("Head")
 end
@@ -90,7 +98,7 @@ local function angleTo(fromCF, toPos)
 end
 
 --========================================================--
--- WARNING TEXT (Center Top)
+-- WARN TEXT
 --========================================================--
 local warn = Drawing.new("Text")
 warn.Size = 32
@@ -101,16 +109,20 @@ warn.Font = 2
 warn.Visible = false
 getgenv().A_WARN = warn
 
+--========================================================--
+-- THREAT STATE
+--========================================================--
 local watchers = {}
 
 --========================================================--
--- MAIN THREAT LOOP (AWAKE ONLY)
+-- MAIN THREAT LOOP (Heartbeat)
 --========================================================--
 getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
     local char = LocalCharacter
     if not char then return end
 
-    local root = char.PrimaryPart
+    local root =
+        char.PrimaryPart
         or char:FindFirstChild("Middle")
         or char:FindFirstChildWhichIsA("BasePart")
     if not root then return end
@@ -120,9 +132,9 @@ getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
 
     local now = os.clock()
 
-    -- AWAKE-ONLY SCAN
-    for model, state in pairs(AwakeState) do
-        if state.sleeping ~= false or not model.Parent then
+    -- AWAKE player scan
+    for model, st in pairs(AwakeState) do
+        if st.sleeping ~= false or not model.Parent then
             watchers[model] = nil
             continue
         end
@@ -133,10 +145,15 @@ getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
         local dist = (head.Position - myPos).Magnitude
         if dist > MAX_DIST * 1.5 then continue end
 
+        -- Ensure watcher slot exists
         watchers[model] = watchers[model] or { lookTime = 0, lastSeen = now, threat = 0 }
         local info = watchers[model]
 
-        local angle = angleTo(head.CFrame, myPos)
+        -- FIXED LOOK VECTOR SOURCE
+        local lp = getLookPart(model)
+        if not lp then continue end
+
+        local angle = angleTo(lp.CFrame, myPos)
         local facing = angle <= FOV_ANGLE
 
         if facing then
@@ -154,19 +171,20 @@ getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
                 0, 1
             )
         else
+            -- Quick decay
             info.lookTime = math.max(0, info.lookTime - dt * 2)
             info.threat   = math.max(0, info.threat   - dt * 0.5)
         end
     end
 
-    -- prune weak / dead
+    -- Prune dead
     for model, info in pairs(watchers) do
         if not model.Parent or (now - info.lastSeen > 10 and info.threat <= THREAT_MIN) then
             watchers[model] = nil
         end
     end
 
-    -- update HUD
+    -- Warning system
     local highest = 0
     for _, info in pairs(watchers) do
         if info.threat > highest then highest = info.threat end
@@ -193,13 +211,14 @@ getgenv().A_CONN = RunService.Heartbeat:Connect(function(dt)
 end)
 
 --========================================================--
--- TRIANGLES (Above Head) — AWAKE ONLY
+-- TRIANGLES (RenderStepped)
 --========================================================--
 local function createTriangle()
     local a = Drawing.new("Line")
     local b = Drawing.new("Line")
     local c = Drawing.new("Line")
     a.Thickness = 3; b.Thickness = 3; c.Thickness = 3
+    a.Visible = true; b.Visible = true; c.Visible = true
     table.insert(getgenv().A_TRI, a)
     table.insert(getgenv().A_TRI, b)
     table.insert(getgenv().A_TRI, c)
@@ -207,10 +226,8 @@ local function createTriangle()
 end
 
 getgenv().A_TRI_CONN = RunService.RenderStepped:Connect(function()
-    -- clear drawings
-    for _, d in ipairs(getgenv().A_TRI) do
-        pcall(function() d:Remove() end)
-    end
+    -- Clear previous frame
+    for _, d in ipairs(getgenv().A_TRI) do pcall(function() d:Remove() end) end
     table.clear(getgenv().A_TRI)
 
     for model, info in pairs(watchers) do
@@ -219,6 +236,7 @@ getgenv().A_TRI_CONN = RunService.RenderStepped:Connect(function()
         local head = getHead(model)
         if not head then continue end
 
+        -- Perfect head offset
         local pos, onScreen = Cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
         if not onScreen then continue end
 
@@ -248,6 +266,11 @@ getgenv().A_TRI_CONN = RunService.RenderStepped:Connect(function()
 end)
 
 end)
+
+
+
+
+
 
 
 
