@@ -1,0 +1,120 @@
+--========================================================--
+--      UNIFIED AWAKE + SLEEPER ESP (Drawing-Only)
+--========================================================--
+
+local RS        = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Cam       = Workspace.CurrentCamera
+
+--========================================================--
+--  CLEANUP (safe re-exec)
+--========================================================--
+if getgenv().U_STATE_DRAW then
+    for _, d in ipairs(getgenv().U_STATE_DRAW) do pcall(d.Remove, d) end
+end
+getgenv().U_STATE_DRAW = {}
+
+local drawings = getgenv().U_STATE_DRAW
+local tracked  = {}  -- [stateTable] = { head, model, draw }
+
+local HEAD_OFFSET = Vector3.new(0, 2, 0)
+
+--========================================================--
+--  CREATE LABEL
+--========================================================--
+local function makeLabel()
+    local t = Drawing.new("Text")
+    t.Size = 18
+    t.Center = true
+    t.Outline = true
+    t.OutlineColor = Color3.fromRGB(0, 0, 0)
+    t.Transparency = 1
+    t.Visible = false
+    table.insert(drawings, t)
+    return t
+end
+
+--========================================================--
+--  TRY ATTACH STATE
+--========================================================--
+local function attachState(state)
+    if tracked[state] then return end
+    if type(state) ~= "table" then return end
+    if rawget(state, "sleeping") == nil then return end
+    if rawget(state, "type") ~= "Player" then return end
+
+    local model = rawget(state, "model")
+    if typeof(model) ~= "Instance" then return end
+
+    local head = model:FindFirstChild("Head")
+    if not head then return end
+
+    tracked[state] = {
+        head = head,
+        model = model,
+        draw = makeLabel()
+    }
+end
+
+--========================================================--
+--  INITIAL GC SCAN (one-time)
+--========================================================--
+for _, t in next, getgc(true) do
+    attachState(t)
+end
+
+--========================================================--
+--  INSTANT FUTURE DETECTION
+--========================================================--
+Workspace.DescendantAdded:Connect(function(obj)
+    if not obj:IsA("Model") then return end
+    if not obj:FindFirstChild("Head") then return end
+
+    -- tiny micro-scan for the matching GC table
+    for _, t in next, getgc(true) do
+        if type(t) == "table"
+            and rawget(t, "model") == obj
+            and rawget(t, "sleeping") ~= nil
+        then
+            attachState(t)
+        end
+    end
+end)
+
+--========================================================--
+--  RENDER LOOP (single ultra-light)
+--========================================================--
+RS.RenderStepped:Connect(function()
+    for state, info in next, tracked do
+        local head  = info.head
+        local model = info.model
+        local draw  = info.draw
+
+        -- removed from workspace
+        if not model or not head or not model:IsDescendantOf(Workspace) then
+            draw.Visible = false
+            continue
+        end
+
+        -- update label based on state
+        if state.sleeping == true then
+            draw.Text  = "SLEEPER"
+            draw.Color = Color3.fromRGB(255, 255, 255)   -- white
+        elseif state.sleeping == false then
+            draw.Text  = "AWAKE"
+            draw.Color = Color3.fromRGB(0, 255, 0)       -- green
+        else
+            draw.Visible = false
+            continue
+        end
+
+        -- project to screen
+        local pos, ok = Cam:WorldToViewportPoint(head.Position + HEAD_OFFSET)
+        if ok and pos.Z > 0 then
+            draw.Position = Vector2.new(pos.X, pos.Y)
+            draw.Visible = true
+        else
+            draw.Visible = false
+        end
+    end
+end)
