@@ -1,0 +1,13 @@
+local buf = {}
+
+for _, v in next, getgc(true) do
+    if type(v) == "table" and rawget(v, "sleeping") ~= nil then
+        table.insert(buf, "\n===== SLEEPER TABLE FOUND =====")
+        for k, val in pairs(v) do
+            table.insert(buf, k .. " = " .. tostring(val))
+        end
+    end
+end
+
+setclipboard(table.concat(buf, "\n"))
+print("Copied sleeper table content to clipboard!")
