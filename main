@@ -71,7 +71,6 @@ local function registerModel(model)
                 threat = { value = 0, lookTime = 0, lastSeen = os.clock() }
             }
 
-            print("[ULTIMATE] Tracking:", model.Name)
             return
         end
     end
@@ -593,7 +592,6 @@ end
 local function Toggle()
     -- BLOCKED unless Master button is ON
     if not MASTER then
-        print("[BLOCKED] Master button is OFF")
         return
     end
 
@@ -2532,7 +2530,6 @@ task.spawn(function() -- << ISOLATED JETPACK ABUSE SYSTEM >>
         if input.KeyCode == JETPACK_KEY then
             jetpackEnabled = not jetpackEnabled
             jetpackText.Visible = jetpackEnabled
-            print("[🚀] Jetpack:", jetpackEnabled and "ENABLED" or "DISABLED")
         end
     end)
 
