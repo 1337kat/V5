@@ -1,3 +1,4 @@
+task.spawn(function()
 local RunService = game:GetService("RunService")
 local Workspace  = game:GetService("Workspace")
 local Camera     = Workspace.CurrentCamera
@@ -113,7 +114,12 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
     local myPos = myRoot.Position
     local highestThreat = 0
 
+    -- 🔹 TRACK WHICH IDS ARE SEEN THIS FRAME
+    local seen = {}
+
     for id, entity in next, EntityMap do
+        seen[id] = true
+
         -- HARD FILTER
         if entity.type ~= "Player" or entity.sleeping then
             local esp = T[id]
@@ -138,29 +144,22 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
         local head = data.head
         local root = data.root
 
-        -- Distance
         local dist = (head.Position - myPos).Magnitude
         if dist > MAX_DIST * 2 then
             for _, l in ipairs(data.tri) do l.Visible = false end
             continue
         end
 
-        -- Facing angle (AUTHORITATIVE)
         local dir = (myPos - root.Position).Unit
         local angle = math.deg(math.acos(math.clamp(
             root.CFrame.LookVector:Dot(dir), -1, 1
         )))
 
-        -- Threat (purely informational)
         local aScore = 1 - math.clamp(angle / FOV, 0, 1)
         local dScore = 1 - math.clamp(dist / MAX_DIST, 0, 1)
         local threat = math.clamp(aScore * 0.6 + dScore * 0.4, 0, 1)
 
         highestThreat = math.max(highestThreat, threat)
-
-        --========================================================--
-        -- TRIANGLE DRAWING (ONLY IF LOOKING)
-        --========================================================--
 
         local screen, onScreen = Camera:WorldToViewportPoint(
             head.Position + Vector3.new(0, 2.5, 0)
@@ -198,6 +197,19 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
     end
 
     --========================================================--
+    -- 🔥 STALE ENTITY CLEANUP (PLAYER REMOVED)
+    --========================================================--
+
+    for id, data in pairs(T) do
+        if not seen[id] then
+            for _, l in ipairs(data.tri) do
+                l:Remove()
+            end
+            T[id] = nil
+        end
+    end
+
+    --========================================================--
     -- GLOBAL WARNING SYSTEM
     --========================================================--
 
@@ -206,13 +218,11 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
         warn.Color = Color3.new(1,0,0)
         warn.Size = 42
         warn.Visible = true
-
     elseif highestThreat >= 0.55 then
         warn.Text = "BEING WATCHED"
         warn.Color = Color3.new(1,0.3,0)
         warn.Size = 38
         warn.Visible = true
-
     elseif highestThreat >= 0.25 then
         warn.Text = "Threat nearby"
         warn.Color = Color3.new(1,1,0.3)
@@ -222,3 +232,5 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
         warn.Visible = false
     end
 end))
+
+end)
