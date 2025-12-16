@@ -1,0 +1,224 @@
+local RunService = game:GetService("RunService")
+local Workspace  = game:GetService("Workspace")
+local Camera     = Workspace.CurrentCamera
+
+local Const      = Workspace:WaitForChild("Const")
+local Ignore     = Const:WaitForChild("Ignore")
+local LocalChar  = Ignore:WaitForChild("LocalCharacter")
+
+-- Authoritative entity source
+local Classes   = getrenv()._G.classes
+local EntityMap = Classes.Player.EntityMap
+
+--========================================================--
+-- GLOBAL CLEANUP (SAFE RE-EXEC)
+--========================================================--
+
+if getgenv().ULTIMATE_ESP then
+    for _, v in ipairs(getgenv().ULTIMATE_ESP.drawings or {}) do
+        pcall(v.Remove, v)
+    end
+    for _, c in ipairs(getgenv().ULTIMATE_ESP.connections or {}) do
+        pcall(c.Disconnect, c)
+    end
+end
+
+getgenv().ULTIMATE_ESP = {
+    drawings    = {},
+    connections = {},
+    tracked     = {} -- [entity.id] = data
+}
+
+local T = getgenv().ULTIMATE_ESP.tracked
+local D = getgenv().ULTIMATE_ESP.drawings
+local C = getgenv().ULTIMATE_ESP.connections
+
+--========================================================--
+-- CONFIG
+--========================================================--
+
+local FOV        = 50
+local MAX_DIST   = 350
+local THREAT_MIN = 0.02
+
+local BASE_COLOR = Color3.fromRGB(255, 200, 120)
+
+--========================================================--
+-- TRIANGLE CREATION
+--========================================================--
+
+local function newTri()
+    local tri = {}
+    for i = 1, 3 do
+        local l = Drawing.new("Line")
+        l.Thickness = 3
+        l.Color = BASE_COLOR
+        l.Visible = false
+        table.insert(D, l)
+        tri[i] = l
+    end
+    return tri
+end
+
+--========================================================--
+-- ATTACH ENTITY (PLAYERS ONLY)
+--========================================================--
+
+local function attach(entity)
+    if T[entity.id] then return end
+    if entity.type ~= "Player" then return end
+    if entity.sleeping then return end
+    if not entity.model then return end
+
+    local model = entity.model
+    local head  = model:FindFirstChild("Head")
+    local root  = model:FindFirstChild("HumanoidRootPart")
+    if not (head and root) then return end
+
+    T[entity.id] = {
+        model  = model,
+        head   = head,
+        root   = root,
+        tri    = newTri(),
+        threat = 0
+    }
+end
+
+--========================================================--
+-- GLOBAL WARNING TEXT
+--========================================================--
+
+local warn = Drawing.new("Text")
+warn.Center = true
+warn.Size = 36
+warn.Outline = true
+warn.Font = 2
+warn.Position = Vector2.new(Camera.ViewportSize.X / 2, 50)
+warn.Visible = false
+table.insert(D, warn)
+
+--========================================================--
+-- MAIN LOOP
+--========================================================--
+
+table.insert(C, RunService.RenderStepped:Connect(function(dt)
+    local myRoot =
+        LocalChar and (LocalChar.PrimaryPart or LocalChar:FindFirstChildWhichIsA("BasePart"))
+
+    if not myRoot then
+        warn.Visible = false
+        return
+    end
+
+    local myPos = myRoot.Position
+    local highestThreat = 0
+
+    for id, entity in next, EntityMap do
+        -- HARD FILTER
+        if entity.type ~= "Player" or entity.sleeping then
+            local esp = T[id]
+            if esp then
+                for _, l in ipairs(esp.tri) do l.Visible = false end
+                T[id] = nil
+            end
+            continue
+        end
+
+        attach(entity)
+        local data = T[id]
+        if not data then continue end
+
+        local model = data.model
+        if not model or not model.Parent then
+            for _, l in ipairs(data.tri) do l:Remove() end
+            T[id] = nil
+            continue
+        end
+
+        local head = data.head
+        local root = data.root
+
+        -- Distance
+        local dist = (head.Position - myPos).Magnitude
+        if dist > MAX_DIST * 2 then
+            for _, l in ipairs(data.tri) do l.Visible = false end
+            continue
+        end
+
+        -- Facing angle (AUTHORITATIVE)
+        local dir = (myPos - root.Position).Unit
+        local angle = math.deg(math.acos(math.clamp(
+            root.CFrame.LookVector:Dot(dir), -1, 1
+        )))
+
+        -- Threat (purely informational)
+        local aScore = 1 - math.clamp(angle / FOV, 0, 1)
+        local dScore = 1 - math.clamp(dist / MAX_DIST, 0, 1)
+        local threat = math.clamp(aScore * 0.6 + dScore * 0.4, 0, 1)
+
+        highestThreat = math.max(highestThreat, threat)
+
+        --========================================================--
+        -- TRIANGLE DRAWING (ONLY IF LOOKING)
+        --========================================================--
+
+        local screen, onScreen = Camera:WorldToViewportPoint(
+            head.Position + Vector3.new(0, 2.5, 0)
+        )
+
+        if angle <= FOV and threat > THREAT_MIN and onScreen then
+            local size =
+                threat > 0.75 and 45 or
+                threat > 0.4  and 32 or
+                22
+
+            local col =
+                threat > 0.75 and Color3.new(1,0.15,0.15) or
+                threat > 0.4  and Color3.new(1,0.7,0) or
+                BASE_COLOR
+
+            local top   = Vector2.new(screen.X, screen.Y - size * 0.8)
+            local left  = Vector2.new(screen.X - size * 0.7, screen.Y + size * 0.5)
+            local right = Vector2.new(screen.X + size * 0.7, screen.Y + size * 0.5)
+
+            local tri = data.tri
+            tri[1].From = left;  tri[1].To = top
+            tri[2].From = top;   tri[2].To = right
+            tri[3].From = right; tri[3].To = left
+
+            for _, l in ipairs(tri) do
+                l.Color = col
+                l.Visible = true
+            end
+        else
+            for _, l in ipairs(data.tri) do
+                l.Visible = false
+            end
+        end
+    end
+
+    --========================================================--
+    -- GLOBAL WARNING SYSTEM
+    --========================================================--
+
+    if highestThreat >= 0.8 then
+        warn.Text = "EXTREME DANGER"
+        warn.Color = Color3.new(1,0,0)
+        warn.Size = 42
+        warn.Visible = true
+
+    elseif highestThreat >= 0.55 then
+        warn.Text = "BEING WATCHED"
+        warn.Color = Color3.new(1,0.3,0)
+        warn.Size = 38
+        warn.Visible = true
+
+    elseif highestThreat >= 0.25 then
+        warn.Text = "Threat nearby"
+        warn.Color = Color3.new(1,1,0.3)
+        warn.Size = 32
+        warn.Visible = true
+    else
+        warn.Visible = false
+    end
+end))
