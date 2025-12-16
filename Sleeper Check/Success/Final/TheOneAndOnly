@@ -1,0 +1,193 @@
+local CONFIG = {
+    MAX_DISTANCE = 4500,
+
+    COLOR_PLAYER  = Color3.fromRGB(0, 255, 0),
+    COLOR_SOLDIER = Color3.fromRGB(255, 120, 0),
+
+    TEXT_SIZE = 13,
+    THICKNESS = 1,
+
+    -- R15 humanoid fit (industry standard)
+    TOP_OFFSET    = 3.2,
+    BOTTOM_OFFSET = 2.8,
+
+    WIDTH_RATIO = 0.5, -- width = height * ratio
+}
+
+--========================================================--
+-- CLEANUP (SAFE RE-EXEC)
+--========================================================--
+
+if getgenv().ENTITYMAP_ESP then
+    for _, esp in pairs(getgenv().ENTITYMAP_ESP) do
+        for _, d in pairs(esp.drawings) do
+            pcall(d.Remove, d)
+        end
+    end
+end
+
+local tracked = {}
+getgenv().ENTITYMAP_ESP = tracked
+
+--========================================================--
+-- DRAWING HELPERS
+--========================================================--
+
+local function line()
+    local l = Drawing.new("Line")
+    l.Thickness = CONFIG.THICKNESS
+    l.Visible = false
+    return l
+end
+
+local function text()
+    local t = Drawing.new("Text")
+    t.Center = true
+    t.Outline = true
+    t.Size = CONFIG.TEXT_SIZE
+    t.Visible = false
+    return t
+end
+
+local function destroy(id)
+    local esp = tracked[id]
+    if not esp then return end
+
+    for _, d in pairs(esp.drawings) do
+        pcall(d.Remove, d)
+    end
+
+    tracked[id] = nil
+end
+
+--========================================================--
+-- ATTACH ESP
+--========================================================--
+
+local function attach(entity)
+    if tracked[entity.id] then return end
+    if not entity.model then return end
+    if not entity.model:FindFirstChild("HumanoidRootPart") then return end
+
+    tracked[entity.id] = {
+        entity = entity,
+        drawings = {
+            tl = line(), tr = line(),
+            br = line(), bl = line(),
+            name = text(),
+            dist = text(),
+        }
+    }
+end
+
+--========================================================--
+-- MAIN LOOP (AUTHORITATIVE)
+--========================================================--
+
+RunService.RenderStepped:Connect(function()
+    local camPos = Camera.CFrame.Position
+
+    for _, entity in next, EntityMap do
+        if entity.type ~= "Player" and entity.type ~= "Soldier" then
+            continue
+        end
+
+        if entity.sleeping then
+            destroy(entity.id)
+            continue
+        end
+
+        attach(entity)
+        local esp = tracked[entity.id]
+        if not esp then continue end
+
+        local model = entity.model
+        if not model or not model.Parent then
+            destroy(entity.id)
+            continue
+        end
+
+        local root = model:FindFirstChild("HumanoidRootPart")
+        if not root then
+            destroy(entity.id)
+            continue
+        end
+
+        local dist = (camPos - root.Position).Magnitude
+        if dist > CONFIG.MAX_DISTANCE then
+            destroy(entity.id)
+            continue
+        end
+
+        --========================================================--
+        -- PERFECT PROJECTION-BASED BOX CALCULATION
+        --========================================================--
+
+        local rootPos = root.Position
+
+        local topWorld    = rootPos + Vector3.new(0, CONFIG.TOP_OFFSET, 0)
+        local bottomWorld = rootPos - Vector3.new(0, CONFIG.BOTTOM_OFFSET, 0)
+
+        local top2d, topOn = Camera:WorldToViewportPoint(topWorld)
+        local bot2d, botOn = Camera:WorldToViewportPoint(bottomWorld)
+
+        if not (topOn and botOn) then
+            for _, d in pairs(esp.drawings) do d.Visible = false end
+            continue
+        end
+
+        local height = math.abs(top2d.Y - bot2d.Y)
+        if height < 2 then
+            for _, d in pairs(esp.drawings) do d.Visible = false end
+            continue
+        end
+
+        local width = height * CONFIG.WIDTH_RATIO
+        local centerX = top2d.X
+        local topY    = top2d.Y
+        local botY    = bot2d.Y
+
+        local d = esp.drawings
+
+        -- Box lines
+        d.tl.From = Vector2.new(centerX - width, topY)
+        d.tl.To   = Vector2.new(centerX + width, topY)
+
+        d.tr.From = Vector2.new(centerX + width, topY)
+        d.tr.To   = Vector2.new(centerX + width, botY)
+
+        d.br.From = Vector2.new(centerX + width, botY)
+        d.br.To   = Vector2.new(centerX - width, botY)
+
+        d.bl.From = Vector2.new(centerX - width, botY)
+        d.bl.To   = Vector2.new(centerX - width, topY)
+
+        local color =
+            entity.type == "Player"
+            and CONFIG.COLOR_PLAYER
+            or CONFIG.COLOR_SOLDIER
+
+        for _, l in ipairs({ d.tl, d.tr, d.br, d.bl }) do
+            l.Color = color
+            l.Visible = true
+        end
+
+        -- Labels
+        d.name.Text = entity.type == "Soldier" and "AI" or "PLAYER"
+        d.name.Position = Vector2.new(centerX, topY - 14)
+        d.name.Color = color
+        d.name.Visible = true
+
+        d.dist.Text = math.floor(dist * 0.28) .. "m"
+        d.dist.Position = Vector2.new(centerX, botY + 2)
+        d.dist.Color = color
+        d.dist.Visible = true
+    end
+
+    -- Cleanup stale
+    for id in pairs(tracked) do
+        if not EntityMap[id] then
+            destroy(id)
+        end
+    end
+end)
