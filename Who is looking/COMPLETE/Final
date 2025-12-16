@@ -1,11 +1,9 @@
 -- WHOS LOOKING / Who is looking/ Who is Watching
--- WHOS LOOKING / Who is looking / Who is Watching
 task.spawn(function()
 --========================================================--
 --          ULTIMATE AWAKE-ONLY ESP + THREAT TRIANGLES
 --          ZERO repeating getgc() · MAX FPS · WIN MODE
 --========================================================--
-task.spawn(function()
 
 local Players      = game:GetService("Players")
 local RunService   = game:GetService("RunService")
@@ -71,7 +69,6 @@ local function registerModel(model)
                 threat = { value = 0, lookTime = 0, lastSeen = os.clock() }
             }
 
-            print("[ULTIMATE] Tracking:", model.Name)
             return
         end
     end
@@ -257,5 +254,4 @@ table.insert(C, RunService.RenderStepped:Connect(function(dt)
 
 end))
 
-end)
 end)
