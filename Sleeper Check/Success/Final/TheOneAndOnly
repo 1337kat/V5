@@ -1,5 +1,21 @@
+--========================================================--
+-- AUTHORITATIVE ENTITYMAP DRAWING ESP
+-- (PLAYERS + SOLDIERS ONLY)
+-- PERFECT SHAPE + CONTROLLED SIZE
+--========================================================--
+
+local RunService = game:GetService("RunService")
+local Camera     = workspace.CurrentCamera
+
+local Classes   = getrenv()._G.classes
+local EntityMap = Classes.Player.EntityMap
+
+--========================================================--
+-- CONFIG
+--========================================================--
+
 local CONFIG = {
-    MAX_DISTANCE = 4500,
+    MAX_DISTANCE = 1250,
 
     COLOR_PLAYER  = Color3.fromRGB(0, 255, 0),
     COLOR_SOLDIER = Color3.fromRGB(255, 120, 0),
@@ -7,11 +23,14 @@ local CONFIG = {
     TEXT_SIZE = 13,
     THICKNESS = 1,
 
-    -- R15 humanoid fit (industry standard)
+    -- R15 humanoid projection fit (perfect shape)
     TOP_OFFSET    = 3.2,
     BOTTOM_OFFSET = 2.8,
 
     WIDTH_RATIO = 0.5, -- width = height * ratio
+
+    -- FINAL SIZE CONTROL (THIS MATCHES YOUR PREVIOUS ESP SIZE)
+    SIZE_MULT = 1.15, -- tweak if needed (1.0 = true projection)
 }
 
 --========================================================--
@@ -120,7 +139,7 @@ RunService.RenderStepped:Connect(function()
         end
 
         --========================================================--
-        -- PERFECT PROJECTION-BASED BOX CALCULATION
+        -- PERFECT PROJECTION-BASED BOX (SIZE CONTROLLED)
         --========================================================--
 
         local rootPos = root.Position
@@ -136,13 +155,13 @@ RunService.RenderStepped:Connect(function()
             continue
         end
 
-        local height = math.abs(top2d.Y - bot2d.Y)
+        local height = math.abs(top2d.Y - bot2d.Y) * CONFIG.SIZE_MULT
         if height < 2 then
             for _, d in pairs(esp.drawings) do d.Visible = false end
             continue
         end
 
-        local width = height * CONFIG.WIDTH_RATIO
+        local width  = height * CONFIG.WIDTH_RATIO
         local centerX = top2d.X
         local topY    = top2d.Y
         local botY    = bot2d.Y
