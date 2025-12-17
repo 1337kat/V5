@@ -28,7 +28,7 @@ end
 getgenv().ULTIMATE_ESP = {
     drawings    = {},
     connections = {},
-    tracked     = {}
+    tracked     = {} -- [entity.id] = data
 }
 
 local T = getgenv().ULTIMATE_ESP.tracked
@@ -87,34 +87,23 @@ local function attach(entity)
 end
 
 --========================================================--
--- GLOBAL WARNING TEXT (TOP-MIDDLE ANCHORED)
+-- GLOBAL WARNING TEXT
 --========================================================--
 
 local warn = Drawing.new("Text")
 warn.Center = true
+warn.Size = 36
 warn.Outline = true
 warn.Font = 2
-warn.Size = 36
+warn.Position = Vector2.new(Camera.ViewportSize.X / 2, 50)
 warn.Visible = false
 table.insert(D, warn)
-
--- Anchor logic (Drawing equivalent of AnchorPoint + Scale)
-local function updateWarnPosition()
-    local vp = Camera.ViewportSize
-    warn.Position = Vector2.new(
-        vp.X * 0.5,   -- horizontal center
-        vp.Y * 0.08   -- top padding (8% down)
-    )
-end
-
-updateWarnPosition()
-table.insert(C, Camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateWarnPosition))
 
 --========================================================--
 -- MAIN LOOP
 --========================================================--
 
-table.insert(C, RunService.RenderStepped:Connect(function()
+table.insert(C, RunService.RenderStepped:Connect(function(dt)
     local myRoot =
         LocalChar and (LocalChar.PrimaryPart or LocalChar:FindFirstChildWhichIsA("BasePart"))
 
@@ -126,11 +115,13 @@ table.insert(C, RunService.RenderStepped:Connect(function()
     local myPos = myRoot.Position
     local highestThreat = 0
 
+    -- 🔹 TRACK WHICH IDS ARE SEEN THIS FRAME
     local seen = {}
 
     for id, entity in next, EntityMap do
         seen[id] = true
 
+        -- HARD FILTER
         if entity.type ~= "Player" or entity.sleeping then
             local esp = T[id]
             if esp then
@@ -144,7 +135,8 @@ table.insert(C, RunService.RenderStepped:Connect(function()
         local data = T[id]
         if not data then continue end
 
-        if not data.model or not data.model.Parent then
+        local model = data.model
+        if not model or not model.Parent then
             for _, l in ipairs(data.tri) do l:Remove() end
             T[id] = nil
             continue
@@ -206,12 +198,14 @@ table.insert(C, RunService.RenderStepped:Connect(function()
     end
 
     --========================================================--
-    -- STALE ENTITY CLEANUP
+    -- 🔥 STALE ENTITY CLEANUP (PLAYER REMOVED)
     --========================================================--
 
     for id, data in pairs(T) do
         if not seen[id] then
-            for _, l in ipairs(data.tri) do l:Remove() end
+            for _, l in ipairs(data.tri) do
+                l:Remove()
+            end
             T[id] = nil
         end
     end
@@ -223,17 +217,17 @@ table.insert(C, RunService.RenderStepped:Connect(function()
     if highestThreat >= 0.8 then
         warn.Text = "EXTREME DANGER"
         warn.Color = Color3.new(1,0,0)
-        warn.Size = 84 -- 42
+        warn.Size = 84
         warn.Visible = true
     elseif highestThreat >= 0.55 then
         warn.Text = "BEING WATCHED"
         warn.Color = Color3.new(1,0.3,0)
-        warn.Size = 76 -- 38
+        warn.Size = 76
         warn.Visible = true
     elseif highestThreat >= 0.25 then
         warn.Text = "Threat nearby"
         warn.Color = Color3.new(1,1,0.3)
-        warn.Size = 64 -- 32
+        warn.Size = 64
         warn.Visible = true
     else
         warn.Visible = false
