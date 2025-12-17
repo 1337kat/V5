@@ -1,0 +1,151 @@
+--========================================================--
+-- MOD PNG VIEWER (GUARANTEED STATUS)
+--========================================================--
+
+local Players = game:GetService("Players")
+local Camera  = workspace.CurrentCamera
+
+--========================================================--
+-- CONFIG
+--========================================================--
+
+local MOD_USERID    = 3171220133
+local PNG_PATH     = "avatar_test/3171220133.png"
+
+local JOIN_TEXT    = "🚨 A MOD JOINED THE SERVER!"
+local PRESENT_TEXT = "🛡️ MOD CURRENTLY IN THE SERVER"
+local ABSENT_TEXT  = "❌ NO MOD IN THE SERVER"
+
+--========================================================--
+-- REQUIREMENTS
+--========================================================--
+
+local hui = gethui and gethui()
+assert(hui, "gethui() not supported")
+
+assert(isfile and isfile(PNG_PATH), "PNG file not found: "..PNG_PATH)
+
+local asset =
+    getsynasset
+    or getcustomasset
+    or error("No asset bridge supported")
+
+--========================================================--
+-- SAFE RE-EXEC CLEANUP
+--========================================================--
+
+if getgenv().MOD_PNG_VIEWER then
+    local old = getgenv().MOD_PNG_VIEWER
+    if old.gui then old.gui:Destroy() end
+end
+
+getgenv().MOD_PNG_VIEWER = {}
+
+--========================================================--
+-- GUI (PNG VIEWER STYLE)
+--========================================================--
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "ModPNGViewer"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 1e9
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.Parent = hui
+getgenv().MOD_PNG_VIEWER.gui = gui
+
+local frame = Instance.new("Frame")
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.Position = UDim2.fromScale(0.5, 0.5)
+frame.Size = UDim2.fromOffset(420, 480)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 3
+stroke.Color = Color3.fromRGB(255, 80, 80)
+stroke.Parent = frame
+
+-- Title
+local title = Instance.new("TextLabel")
+title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.fromOffset(10, 8)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.fromRGB(255, 120, 120)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Text = "MOD STATUS"
+title.Parent = frame
+
+-- Status text (THIS IS WHAT CHANGES)
+local statusText = Instance.new("TextLabel")
+statusText.BackgroundTransparency = 1
+statusText.Size = UDim2.new(1, -20, 0, 40)
+statusText.Position = UDim2.fromOffset(10, 48)
+statusText.Font = Enum.Font.GothamBold
+statusText.TextSize = 16
+statusText.TextColor3 = Color3.fromRGB(255, 200, 200)
+statusText.TextXAlignment = Enum.TextXAlignment.Left
+statusText.TextWrapped = true
+statusText.Text = ABSENT_TEXT
+statusText.Parent = frame
+
+-- Image
+local img = Instance.new("ImageLabel")
+img.BackgroundTransparency = 1
+img.AnchorPoint = Vector2.new(0.5, 0)
+img.Position = UDim2.new(0.5, 0, 0, 110)
+img.Size = UDim2.fromOffset(300, 300)
+img.ImageTransparency = 0
+img.ZIndex = 10
+img.Parent = frame
+
+--========================================================--
+-- LOAD PNG FROM DISK
+--========================================================--
+
+task.spawn(function()
+    task.wait()
+    img.Image = asset(PNG_PATH)
+end)
+
+--========================================================--
+-- STATUS UPDATE LOGIC (AUTHORITATIVE)
+--========================================================--
+
+local function isModInServer()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.UserId == MOD_USERID then
+            return true
+        end
+    end
+    return false
+end
+
+local function refreshStatus(fromJoin)
+    if isModInServer() then
+        statusText.Text = fromJoin and JOIN_TEXT or PRESENT_TEXT
+    else
+        statusText.Text = ABSENT_TEXT
+    end
+end
+
+-- Initial authoritative check (AFTER Players list is ready)
+task.defer(function()
+    refreshStatus(false)
+end)
+
+-- Events
+Players.PlayerAdded:Connect(function(p)
+    if p.UserId == MOD_USERID then
+        refreshStatus(true)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if p.UserId == MOD_USERID then
+        refreshStatus(false)
+    end
+end)
