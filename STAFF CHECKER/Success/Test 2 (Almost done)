@@ -1,0 +1,188 @@
+--========================================================--
+-- STACKED MOD PRESENCE HUD (MULTI-MOD)
+-- real PNG • gethui only • safe re-exec
+--========================================================--
+
+local Players     = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+--========================================================--
+-- CONFIG
+--========================================================--
+
+local MOD_USERIDS = {
+    9724991729,
+    9954329834,
+}
+
+local FOLDER = "mod_avatars"
+
+local TEXT_JOINED  = "🚨 MOD JOINED THE SERVER"
+local TEXT_PRESENT = "🛡️ MOD CURRENTLY IN SERVER"
+
+-- stack origin (top-right corner)
+local STACK_POSITION = UDim2.fromScale(0.98, 0.06)
+
+--========================================================--
+-- REQUIREMENTS
+--========================================================--
+
+local hui = gethui and gethui()
+assert(hui, "gethui() not supported")
+
+local asset = getsynasset or getcustomasset or error("No asset bridge")
+
+assert(writefile and isfile and delfile, "file funcs missing")
+assert(makefolder and isfolder, "folder funcs missing")
+
+if not isfolder(FOLDER) then
+    makefolder(FOLDER)
+end
+
+--========================================================--
+-- SAFE RE-EXEC
+--========================================================--
+
+if getgenv().MOD_STACK_HUD then
+    local old = getgenv().MOD_STACK_HUD
+    if old.gui then old.gui:Destroy() end
+end
+
+getgenv().MOD_STACK_HUD = { entries = {} }
+
+--========================================================--
+-- GUI ROOT
+--========================================================--
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "ModStackHUD"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 1e9
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.Parent = hui
+
+if syn and syn.protect_gui then
+    pcall(syn.protect_gui, gui)
+end
+
+getgenv().MOD_STACK_HUD.gui = gui
+
+local stack = Instance.new("Frame", gui)
+stack.AnchorPoint = Vector2.new(1, 0)
+stack.Position = STACK_POSITION
+stack.Size = UDim2.fromOffset(300, 600)
+stack.BackgroundTransparency = 1
+
+local layout = Instance.new("UIListLayout", stack)
+layout.Padding = UDim.new(0, 10)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+--========================================================--
+-- AVATAR DOWNLOAD (REAL PNG)
+--========================================================--
+
+local PNG_SIG = "\137PNG\r\n\26\n"
+
+local function avatarPath(userId)
+    return string.format("%s/%d.png", FOLDER, userId)
+end
+
+local function downloadAvatar(userId)
+    local api =
+        ("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=%d&size=150x150&format=Png&isCircular=false")
+        :format(userId)
+
+    local response = HttpService:JSONDecode(game:HttpGet(api))
+    local imageUrl = response.data and response.data[1] and response.data[1].imageUrl
+    if not imageUrl then return nil end
+
+    local pngData = game:HttpGet(imageUrl)
+    if pngData:sub(1,8) ~= PNG_SIG then return nil end
+
+    local path = avatarPath(userId)
+    if isfile(path) then delfile(path) end
+    writefile(path, pngData)
+
+    return path
+end
+
+--========================================================--
+-- CREATE MOD ENTRY
+--========================================================--
+
+local function createEntry(player, joined)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromOffset(260, 84)
+    frame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+    frame.BorderSizePixel = 0
+    frame.Parent = stack
+
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
+
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(255,80,80)
+
+    local avatar = Instance.new("ImageLabel", frame)
+    avatar.BackgroundTransparency = 1
+    avatar.Size = UDim2.fromOffset(56,56)
+    avatar.Position = UDim2.fromOffset(12,14)
+    avatar.ScaleType = Enum.ScaleType.Fit
+    avatar.ZIndex = 10
+
+    local text = Instance.new("TextLabel", frame)
+    text.BackgroundTransparency = 1
+    text.Position = UDim2.fromOffset(80,18)
+    text.Size = UDim2.new(1,-90,0,40)
+    text.Font = Enum.Font.GothamBold
+    text.TextSize = 13
+    text.TextWrapped = true
+    text.TextXAlignment = Enum.TextXAlignment.Left
+    text.TextYAlignment = Enum.TextYAlignment.Center
+    text.TextColor3 = Color3.fromRGB(255,200,200)
+    text.Text = joined and TEXT_JOINED or TEXT_PRESENT
+    text.ZIndex = 10
+
+    local path = downloadAvatar(player.UserId)
+    if path and isfile(path) then
+        task.wait()
+        local ok, id = pcall(asset, path)
+        if ok then
+            avatar.Image = id
+            task.wait()
+            avatar.Image = id
+        end
+    end
+
+    getgenv().MOD_STACK_HUD.entries[player.UserId] = frame
+end
+
+--========================================================--
+-- INITIAL SCAN
+--========================================================--
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if table.find(MOD_USERIDS, p.UserId) then
+        createEntry(p, false)
+    end
+end
+
+--========================================================--
+-- EVENTS
+--========================================================--
+
+Players.PlayerAdded:Connect(function(p)
+    if table.find(MOD_USERIDS, p.UserId) then
+        createEntry(p, true)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    local entry = getgenv().MOD_STACK_HUD.entries[p.UserId]
+    if entry then
+        entry:Destroy()
+        getgenv().MOD_STACK_HUD.entries[p.UserId] = nil
+    end
+end)
