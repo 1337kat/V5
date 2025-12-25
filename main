@@ -1223,7 +1223,7 @@ task.spawn(function() -- << ISOLATED CAR VEHICLE CONTROL SYSTEM >>
             local lastYawRight = 0
 
             local C = {
-                speed = 285, -- Original 340
+                speed = 350, -- Fastest 340 -- Original 285 
                 upspeed = 15,
                 descendKey = Enum.KeyCode.LeftShift,
                 descendSpeed = 300,
