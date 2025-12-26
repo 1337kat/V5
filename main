@@ -694,11 +694,6 @@ end)
 
 -- LOOP TOGGLE BHOP
 task.spawn(function()
-
---============================================================--
---   MASTER BUTTON + HOLY GRAIL KEY ENGINE (FULL VERSION)
---============================================================--
-
 local hui = gethui and gethui()
 if not hui then return warn("gethui() not supported") end
 
@@ -707,7 +702,7 @@ local old = hui:FindFirstChild("MasterToggleUI")
 if old then old:Destroy() end
 
 --============================================================--
---   UI BUTTON (Right side, tiny, non-annoying)
+-- UI
 --============================================================--
 local sg = Instance.new("ScreenGui")
 sg.Name = "MasterToggleUI"
@@ -728,7 +723,6 @@ click.BackgroundTransparency = 1
 click.Text = ""
 click.Parent = btn
 
--- ON (green) / OFF (red)
 local onIcon = Instance.new("Frame")
 onIcon.Size = UDim2.fromScale(0.55, 0.55)
 onIcon.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -745,34 +739,56 @@ offIcon.BackgroundColor3 = Color3.fromRGB(255,0,0)
 offIcon.Visible = true
 offIcon.Parent = btn
 
--- Primary master toggle
-local MASTER = false
-
-
-
 --============================================================--
---   HOLY GRAIL KEY ENGINE (Zero Key-Stick. Cancel-Safe.)
+-- SERVICES
 --============================================================--
-
-local VIM = game:GetService("VirtualInputManager")
 local UIS = game:GetService("UserInputService")
+local VIM = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+
+--============================================================--
+-- STATE
+--============================================================--
+local MASTER = false
 
 local STATE = {
     Enabled = false,
     Thread = nil,
 }
 
-local KEYS = {
-    Enum.KeyCode.LeftShift,
-    Enum.KeyCode.C
+local ENGINE_KEYS = {
+    Enum.KeyCode.C,
+    Enum.KeyCode.Space
 }
 
 local function Key(k, down)
     VIM:SendKeyEvent(down, k, false, game)
 end
 
-local function ReleaseAll()
-    for _, k in ipairs(KEYS) do
+--============================================================--
+-- 🔒 TRUE SHIFT HARD-LOCK (ABSOLUTE AUTHORITY)
+--============================================================--
+local ShiftForced = false
+
+RunService.Heartbeat:Connect(function()
+    if MASTER then
+        if not ShiftForced then
+            ShiftForced = true
+            Key(Enum.KeyCode.LeftShift, true)
+        end
+    else
+        if ShiftForced then
+            ShiftForced = false
+            Key(Enum.KeyCode.LeftShift, false)
+        end
+    end
+end)
+
+--============================================================--
+-- ENGINE (SUBORDINATE)
+--============================================================--
+local function ReleaseEngineKeys()
+    for _, k in ipairs(ENGINE_KEYS) do
         Key(k, false)
     end
 end
@@ -782,55 +798,43 @@ local function KillThread()
         coroutine.close(STATE.Thread)
     end
     STATE.Thread = nil
-    ReleaseAll()
+    ReleaseEngineKeys()
 end
 
 local function Engine()
     while STATE.Enabled do
-        for _, k in ipairs(KEYS) do Key(k, true) end
+        for _, k in ipairs(ENGINE_KEYS) do
+            Key(k, true)
+        end
         task.wait(0.90)
-
-        for _, k in ipairs(KEYS) do Key(k, false) end
+        for _, k in ipairs(ENGINE_KEYS) do
+            Key(k, false)
+        end
         task.wait(0.75)
     end
-    ReleaseAll()
+    ReleaseEngineKeys()
 end
 
 local function Toggle()
-    -- BLOCKED unless Master button is ON
-    if not MASTER then
-        return
-    end
+    if not MASTER then return end
 
     STATE.Enabled = not STATE.Enabled
-
-    if not STATE.Enabled then
-        KillThread()
-        return
-    end
-
     KillThread()
 
-    local thread = coroutine.create(Engine)
-    STATE.Thread = thread
-    coroutine.resume(thread)
+    if STATE.Enabled then
+        STATE.Thread = coroutine.create(Engine)
+        coroutine.resume(STATE.Thread)
+    end
 end
 
--- Bind F to toggle engine
 UIS.InputBegan:Connect(function(input, gp)
     if not gp and input.KeyCode == Enum.KeyCode.F then
         Toggle()
     end
 end)
 
--- Always cleanup on re-exec
-ReleaseAll()
-KillThread()
-
-
-
 --============================================================--
---   BUTTON CLICK → MASTER ON/OFF SWITCH
+-- MASTER BUTTON (GREEN = SHIFT IS ON NOW)
 --============================================================--
 click.MouseButton1Click:Connect(function()
     MASTER = not MASTER
@@ -838,21 +842,17 @@ click.MouseButton1Click:Connect(function()
     onIcon.Visible = MASTER
     offIcon.Visible = not MASTER
 
-    -- If turning OFF → kill engine immediately
     if not MASTER then
         STATE.Enabled = false
         KillThread()
-
-        -- quick double safety flush
-        task.spawn(function()
-            for i = 1,3 do
-                VIM:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
-                VIM:SendKeyEvent(false, Enum.KeyCode.C, false, game)
-                task.wait()
-            end
-        end)
     end
 end)
+
+--============================================================--
+-- FINAL SAFETY (RE-EXEC CLEAN)
+--============================================================--
+KillThread()
+Key(Enum.KeyCode.LeftShift, false)
 
 end)
 
