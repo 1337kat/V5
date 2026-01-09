@@ -1,0 +1,13 @@
+local old_ray;
+old_ray = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    local line, src, name = debug.info(3, "lsn")
+    if self == Workspace and method == "Raycast" and line == 270 then
+        -- magic bullet - silent aim - alwayshit things here like return { hitdata }
+    end
+    if args[1] == 10 and args[2] == "Fire" then
+        args[4] = CFrame.new() -- makes server receive correct data that raycast was overided to
+    end
+    return old_ray(self, ...)
+end))
