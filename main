@@ -1,3 +1,178 @@
+-- WIFI/ETHERNET CONNECTION INTERRUPTED INDICATOR
+task.spawn(function()
+
+local Players    = game:GetService("Players")
+local Stats      = game:GetService("Stats")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+local SAMPLE_DT  = 0.10
+local STALL_TIME = 0.80
+
+local FONT  = Drawing.Fonts.UI
+local SCALE = 1.35
+
+--========================
+-- Background Panel
+--========================
+local bg = Drawing.new("Square")
+bg.Filled       = true
+bg.Color        = Color3.fromRGB(22, 22, 22)
+bg.Transparency = 0.85
+bg.Thickness    = 1
+bg.ZIndex       = 0
+bg.Visible      = false   -- 🔴 hidden by default
+
+-- Accent Bar
+local accent = Drawing.new("Square")
+accent.Filled       = true
+accent.Color        = Color3.fromRGB(255, 110, 110)
+accent.Transparency = 1
+accent.ZIndex       = 1
+accent.Visible      = false
+
+--========================
+-- Status Text
+--========================
+local statusText = Drawing.new("Text")
+statusText.Text         = "⚠ Connection Interrupted"
+statusText.Color        = Color3.fromRGB(255, 110, 110)
+statusText.Font         = FONT
+statusText.Size         = 17 * SCALE
+statusText.Center       = true
+statusText.ZIndex       = 3
+statusText.Visible      = false
+statusText.Transparency = 1
+
+local statusShadow = Drawing.new("Text")
+statusShadow.Text         = statusText.Text
+statusShadow.Color        = Color3.fromRGB(0, 0, 0)
+statusShadow.Font         = FONT
+statusShadow.Size         = statusText.Size
+statusShadow.Center       = true
+statusShadow.ZIndex       = 2
+statusShadow.Visible      = false
+statusShadow.Transparency = 0.6
+
+--========================
+-- Ping reader (logic only)
+--========================
+local function getPingMs()
+    local net = Stats.Network
+    if not net then return nil end
+
+    local ssi = net.ServerStatsItem
+    if not ssi then return nil end
+
+    local direct = ssi["Data Ping"] or ssi.Ping
+    if direct and direct.GetValue then
+        local ok, v = pcall(direct.GetValue, direct)
+        if ok and type(v) == "number" then return v end
+    end
+end
+
+--========================
+-- Stall Detection
+--========================
+local lastPing       = nil
+local lastChangeTime = os.clock()
+local interrupted    = false
+
+task.spawn(function()
+    while player.Parent do
+        local now  = os.clock()
+        local ping = getPingMs()
+
+        if ping then
+            if lastPing == nil or ping ~= lastPing then
+                lastPing = ping
+                lastChangeTime = now
+
+                -- ✅ RECOVERY: hide EVERYTHING
+                if interrupted then
+                    interrupted = false
+                    bg.Visible           = false
+                    accent.Visible       = false
+                    statusText.Visible   = false
+                    statusShadow.Visible = false
+                end
+            end
+        end
+
+        -- ❌ STALL DETECTED: show EVERYTHING
+        if not interrupted and (now - lastChangeTime) >= STALL_TIME then
+            interrupted = true
+            bg.Visible           = true
+            accent.Visible       = true
+            statusText.Visible   = true
+            statusShadow.Visible = true
+        end
+
+        task.wait(SAMPLE_DT)
+    end
+end)
+
+--========================
+-- Layout (runs always, visibility is gated)
+--========================
+RunService.RenderStepped:Connect(function()
+    if not bg.Visible then return end
+
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+
+    local screen = cam.ViewportSize
+    local cx     = screen.X / 2
+    local topY   = screen.Y * 0.055
+
+    local width  = 300 * SCALE
+    local height = 56  * SCALE
+
+    bg.Size     = Vector2.new(width, height)
+    bg.Position = Vector2.new(cx - width/2, topY)
+
+    accent.Size     = Vector2.new(width, 3 * SCALE)
+    accent.Position = Vector2.new(cx - width/2, topY)
+
+    statusText.Position   = Vector2.new(cx, topY + height * 0.50)
+    statusShadow.Position = statusText.Position + Vector2.new(1, 1)
+end)
+
+--========================
+-- Cleanup
+--========================
+player.AncestryChanged:Connect(function(_, parent)
+    if not parent then
+        bg:Remove()
+        accent:Remove()
+        statusText:Remove()
+        statusShadow:Remove()
+    end
+end)
+
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 -- Staff Checker
 task.spawn(function()
 
