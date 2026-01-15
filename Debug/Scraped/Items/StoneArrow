@@ -1,0 +1,20 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Stone Arrow"
+v1.Description = "A basic stone arrow."
+v1.MaxStack = 50
+v1.Recipe = {
+    ["Cobblestone"] = 5,
+    ["Fiber"] = 2,
+    ["WoodArrow"] = 3
+}
+v1.CraftAmount = 3
+v1.Category = "Weapons"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.AddDamage = 5
+return true
