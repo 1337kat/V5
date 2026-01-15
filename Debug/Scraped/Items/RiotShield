@@ -1,0 +1,34 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.MeleeClient or v2.MeleeServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Riot Shield"
+v1.Description = "A riot shield immune to all projectiles."
+v1.MaxStack = 1
+v1.RepairCost = {
+    ["Steel"] = 5
+}
+v1.MaxCondition = 25
+v1.EquipSound = "Equip"
+v1.AttackDelay = 0.5
+v1.EquipTime = 0.5
+v1.AttackCooldown = 2
+v1.Range = 6
+v1.Damage = 35
+v1.HandModel = "RiotShield"
+v1.OreHarvest = nil
+v1.WoodHarvest = nil
+v1.WeldPart = "RightHand"
+v1.ParentToWorkspace = true
+v1.CameraAngleMin = -0.5
+v1.RecoilData = {}
+v1.VMAnimations = {
+    ["Equip"] = "RiotShieldEquip",
+    ["Idle"] = "RiotShieldHold",
+    ["Swing"] = "RiotShieldUse"
+}
+v1.HMAnimations = {}
+return true
