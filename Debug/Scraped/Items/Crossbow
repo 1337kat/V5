@@ -1,0 +1,74 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.RangedWeaponClient or v2.RangedWeaponServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Crossbow"
+v1.Description = "A primitive handmade crossbow."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Wood"] = 50,
+    ["Iron"] = 5,
+    ["Fiber"] = 35
+}
+v1.CraftAmount = 1
+v1.Category = "Weapons"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.HandModel = "Crossbow"
+v1.WeldPart = "LeftHand"
+v1.TracerPart = "Arrow"
+v1.MaxCondition = 50
+v1.Damage = 40
+v1.ADSZoom = 1.6
+v1.Accuracy = 5000
+v1.MaxAmmo = 1
+v1.ProjectileSpeed = 450
+v1.ProjectileDrop = 3
+v1.AttackCooldown = 1
+v1.FireAction = "semi"
+v1.AmmoTypes = {
+    "WoodArrow",
+    "StoneArrow",
+    "PoisonArrow",
+    "IronArrow"
+}
+v1.EquipTime = 0.75
+v1.ReloadTime = 2.25
+v1.HipRecoil = {
+    ["rotMag"] = 0.05,
+    ["rotSpeed"] = 3,
+    ["push"] = 0.5,
+    ["returnTime"] = 0.05,
+    ["lerp"] = 0.9,
+    ["returnLerp"] = 0.25,
+    ["cameraY"] = 0.03,
+    ["cameraX"] = 0.05,
+    ["cameraXShake"] = 0.5
+}
+v1.AimRecoil = {
+    ["rotMag"] = 0.2,
+    ["rotSpeed"] = 3,
+    ["push"] = 0.5,
+    ["returnTime"] = 0.05,
+    ["lerp"] = 0.9,
+    ["returnLerp"] = 0.25,
+    ["cameraY"] = 0.03,
+    ["cameraX"] = 0.05,
+    ["cameraXShake"] = 0.5
+}
+v1.VMAnimations = {
+    ["Equip"] = "CrossbowEquip",
+    ["Idle"] = "CrossbowHold",
+    ["Reload"] = "CrossbowReload"
+}
+v1.HMAnimations = {}
+v1.Sounds = {
+    ["Fire"] = "CrossbowFire",
+    ["Equip"] = "Equip",
+    ["Pull"] = "CrossbowPull",
+    ["Click"] = "Click"
+}
+return true
