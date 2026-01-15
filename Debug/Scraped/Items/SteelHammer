@@ -1,0 +1,38 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.MeleeClient or v2.MeleeServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Steel Sledgehammer"
+v1.Description = "A steel sledgehammer. Harvests Ores and Wood."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Steel"] = 10,
+    ["Iron"] = 10,
+    ["Plastics"] = 5
+}
+v1.CraftAmount = 1
+v1.Category = "Tools"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = "AdvancedWorkbench"
+v1.MaxCondition = 300
+v1.EquipSound = "Equip"
+v1.AttackDelay = 0.25
+v1.EquipTime = 0.5
+v1.AttackCooldown = 1
+v1.Range = 6.5
+v1.Damage = 23
+v1.HandModel = "SteelHammer"
+v1.OreHarvest = 1.75
+v1.WoodHarvest = 2
+v1.WeldPart = "RightHand"
+v1.RecoilData = {}
+v1.VMAnimations = {
+    ["Equip"] = "MeleeEquipBasic",
+    ["Idle"] = "MeleeHoldBasic",
+    ["Swing"] = "MeleeSwingBasic"
+}
+v1.HMAnimations = {}
+return true
