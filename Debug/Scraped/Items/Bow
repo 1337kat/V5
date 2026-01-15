@@ -1,0 +1,75 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.BowClient or v2.BowServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Bow"
+v1.Description = "A primitive handmade bow."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Wood"] = 50,
+    ["Fiber"] = 25
+}
+v1.CraftAmount = 1
+v1.Category = "Weapons"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.HandModel = "Bow"
+v1.WeldPart = "LeftHand"
+v1.TracerPart = "Arrow"
+v1.MaxCondition = 75
+v1.Damage = 30
+v1.ADSZoom = 1.5
+v1.AimSpeed = 0.12
+v1.Accuracy = 3000
+v1.MaxAmmo = 1
+v1.PullTime = 0.9
+v1.ProjectileSpeed = 300
+v1.ProjectileDrop = 3
+v1.AttackCooldown = 1.15
+v1.FireAction = "semi"
+v1.AmmoTypes = {
+    "WoodArrow",
+    "StoneArrow",
+    "PoisonArrow",
+    "IronArrow"
+}
+v1.EquipTime = 0.5
+v1.HipRecoil = {
+    ["rotMag"] = 0.05,
+    ["rotSpeed"] = 3,
+    ["push"] = 0.5,
+    ["returnTime"] = 0.05,
+    ["lerp"] = 0.9,
+    ["returnLerp"] = 0.25,
+    ["cameraY"] = 0.03,
+    ["cameraX"] = 0.05,
+    ["cameraXShake"] = 0.5
+}
+v1.AimRecoil = {
+    ["rotMag"] = 0.2,
+    ["rotSpeed"] = 3,
+    ["push"] = 0.5,
+    ["returnTime"] = 0.05,
+    ["lerp"] = 0.9,
+    ["returnLerp"] = 0.25,
+    ["cameraY"] = 0.03,
+    ["cameraX"] = 0.05,
+    ["cameraXShake"] = 0.5
+}
+v1.VMAnimations = {
+    ["Equip"] = "BowEquip",
+    ["Idle"] = "BowHold",
+    ["Pull"] = "BowPull"
+}
+v1.HMAnimations = {
+    ["Pull"] = "BowModelPull"
+}
+v1.Sounds = {
+    ["Fire"] = "BowFire",
+    ["Equip"] = "Equip",
+    ["Pull"] = "BowPull"
+}
+return true
