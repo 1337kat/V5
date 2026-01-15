@@ -1,0 +1,69 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.RangedWeaponClient or v2.RangedWeaponServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Blunderbuss"
+v1.Description = "A primitive single barrel shotgun."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Iron"] = 5,
+    ["Wood"] = 25,
+    ["Fiber"] = 10
+}
+v1.CraftAmount = 1
+v1.Category = "Weapons"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.HandModel = "Blunderbuss"
+v1.WeldPart = "RightHand"
+v1.TracerPart = "Bullet"
+v1.MaxCondition = 25
+v1.MaxAmmo = 1
+v1.Damage = 16
+v1.ADSZoom = 1.5
+v1.Accuracy = 1200
+v1.Pellets = 5
+v1.ProjectileSpeed = 600
+v1.ProjectileDrop = 3.5
+v1.AttackCooldown = 0.2
+v1.FireAction = "semi"
+v1.AmmoTypes = { "StoneShot", "IronShot", "SteelShot" }
+v1.ReloadTime = 1.45
+v1.EquipTime = 0.5
+v1.HipRecoil = {
+    ["rotMag"] = 0.05,
+    ["rotSpeed"] = 3,
+    ["push"] = 0.5,
+    ["returnTime"] = 0.05,
+    ["lerp"] = 0.9,
+    ["returnLerp"] = 0.25,
+    ["cameraY"] = 0.01,
+    ["cameraX"] = 0.05,
+    ["cameraXShake"] = 0.5
+}
+v1.AimRecoil = {
+    ["rotMag"] = 0.2,
+    ["rotSpeed"] = 3,
+    ["push"] = 0.5,
+    ["returnTime"] = 0.05,
+    ["lerp"] = 0.9,
+    ["returnLerp"] = 0.25,
+    ["cameraY"] = 0.01,
+    ["cameraX"] = 0.05,
+    ["cameraXShake"] = 0.5
+}
+v1.VMAnimations = {
+    ["Equip"] = "BlunderbussEquip",
+    ["Idle"] = "USP9Hold",
+    ["Reload"] = "BlunderbussReload"
+}
+v1.HMAnimations = {}
+v1.Sounds = {
+    ["Equip"] = "Equip",
+    ["Fire"] = "BlunderbussFire",
+    ["BoltSnap"] = "BlunderbussSmack"
+}
+return true
