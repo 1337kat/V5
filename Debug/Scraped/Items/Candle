@@ -23,3 +23,24 @@ v1.Rotation = 3.141592653589793
 v1.MaxAngle = 95
 v1.MinAngle = 85
 return true
+
+
+
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.CandleClient or v2.CandleServer)
+v1:Inherit(v2.EntityClient or v2.EntityServer)
+v1.BaseModel = script.Model
+v1.Saves = true
+v1.StorageSize = 1
+v1.Lifetime = nil
+v1.RangedMult = 0.1
+v1.MeleeMult = 0.03
+v1.MaxHealth = 20
+v1.HealthVisible = true
+v1.HealthAlwaysVisible = false
+v1.InteractOptions = { "Use", "Access", "Pickup" }
+v1.Flammable = false
+return true
