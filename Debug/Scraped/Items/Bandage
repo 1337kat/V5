@@ -1,0 +1,35 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.ConsumableServer or v2.ConsumableClient)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Bandage"
+v1.Description = "A primitive medical tool that restores a small amount of health."
+v1.MaxStack = 5
+v1.Recipe = {
+    ["Fiber"] = 10
+}
+v1.CraftAmount = 1
+v1.Category = "Aid"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.HandModel = "Bandage"
+v1.WeldPart = "RightHand"
+v1.GiveEnergy = 0
+v1.GiveHealth = 7
+v1.UseTime = 2.5
+v1.UseCooldown = 2
+v1.EquipTime = 0.5
+v1.VMAnimations = {
+    ["Equip"] = "BandageEquip",
+    ["Use"] = "BandageUse",
+    ["Idle"] = "BandageHold"
+}
+v1.HMAnimations = {}
+v1.Sounds = {
+    ["Equip"] = "Equip",
+    ["Use"] = "Bandages"
+}
+return true
