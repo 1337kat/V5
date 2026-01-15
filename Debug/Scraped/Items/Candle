@@ -1,0 +1,25 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.PlaceEntityClient or v2.PlaceEntityServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Candle"
+v1.Description = "A wall-mounted candle. Uses fiber as fuel."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Wood"] = 10,
+    ["Fiber"] = 10,
+    ["Iron"] = 1
+}
+v1.CraftAmount = 1
+v1.Category = "Building"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.Entity = v2.Candle
+v1.BlockBuildingOnTerrain = false
+v1.Rotation = 3.141592653589793
+v1.MaxAngle = 95
+v1.MinAngle = 85
+return true
