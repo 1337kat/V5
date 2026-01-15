@@ -1,0 +1,27 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.ConsumableServer or v2.ConsumableClient)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Tech\'s Beans"
+v1.Description = "A can of premium TechStemm\'s beans."
+v1.MaxStack = 5
+v1.HandModel = "Beans"
+v1.WeldPart = "RightHand"
+v1.GiveEnergy = 10
+v1.GiveHealth = 30
+v1.UseTime = 1
+v1.UseCooldown = 3
+v1.EquipTime = 1
+v1.VMAnimations = {
+    ["Equip"] = "ColaEquip",
+    ["Use"] = "ColaDrink",
+    ["Idle"] = "ColaHold"
+}
+v1.HMAnimations = {}
+v1.Sounds = {
+    ["Use"] = "BeansEat"
+}
+return true
