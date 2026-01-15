@@ -1,0 +1,23 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Wood Chestplate"
+v1.Description = "A piece of armor that absorbs a portion of all damage to the respected body part."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Wood"] = 75,
+    ["Fiber"] = 10
+}
+v1.CraftAmount = 1
+v1.Category = "Armor"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.Occupies = "TorsoArmor"
+v1.HeadProtection = nil
+v1.TorsoProtection = 0.15
+v1.LegsProtection = nil
+v1.MaxCondition = 20
+return true
