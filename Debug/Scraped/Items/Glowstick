@@ -1,0 +1,28 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.GlowstickClient or v2.GlowstickServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Glowstick"
+v1.Description = "A hand-held light source."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Iron"] = 1
+}
+v1.CraftAmount = 1
+v1.Category = "Tools"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = nil
+v1.MaxCondition = 50
+v1.EquipSound = "Equip"
+v1.EquipTime = 0.5
+v1.HandModel = "Glowstick"
+v1.WeldPart = "RightHand"
+v1.VMAnimations = {
+    ["Equip"] = "GlowstickEquip",
+    ["Idle"] = "GlowstickHold"
+}
+v1.HMAnimations = {}
+return true
