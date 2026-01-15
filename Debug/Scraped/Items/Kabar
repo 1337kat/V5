@@ -1,0 +1,39 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.MeleeClient or v2.MeleeServer)
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "KABAR"
+v1.Description = "A fixed-blade knife optimized for combat."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Steel"] = 5,
+    ["Iron"] = 5,
+    ["Fiber"] = 25
+}
+v1.CraftAmount = 1
+v1.Category = "Weapons"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = "BasicWorkbench"
+v1.MaxCondition = 50
+v1.EquipSound = "Equip"
+v1.AttackDelay = 0.25
+v1.EquipTime = 0.5
+v1.AttackCooldown = 0.5
+v1.Range = 6.5
+v1.Damage = 25
+v1.HandModel = "KABAR"
+v1.OreHarvest = 0.5
+v1.WoodHarvest = 0.5
+v1.WeldPart = "RightHand"
+v1.SwingSound = "MeleeSwing2"
+v1.RecoilData = {}
+v1.VMAnimations = {
+    ["Equip"] = "MeleeEquipBasic",
+    ["Idle"] = "MeleeHoldBasic",
+    ["Swing"] = "KABARStab"
+}
+v1.HMAnimations = {}
+return true
