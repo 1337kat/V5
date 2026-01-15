@@ -1,0 +1,23 @@
+-- Decompiled with Medal in Seliware
+
+local v1 = _G.NEXT
+local v2 = _G.classes
+v1:Inherit(v2.ItemClient or v2.ItemServer)
+v1.Thumbnail = script.Image
+v1.Callsign = "Steel Leggings"
+v1.Description = "A piece of armor that absorbs a portion of all damage to the respected body part."
+v1.MaxStack = 1
+v1.Recipe = {
+    ["Steel"] = 7,
+    ["Fiber"] = 20
+}
+v1.CraftAmount = 1
+v1.Category = "Armor"
+v1.RequiredSchematic = nil
+v1.RequiredWorkstation = "AdvancedWorkbench"
+v1.Occupies = "LegsArmor"
+v1.HeadProtection = nil
+v1.TorsoProtection = nil
+v1.LegsProtection = 0.25
+v1.MaxCondition = 75
+return true
