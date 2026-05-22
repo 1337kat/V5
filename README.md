@@ -115,7 +115,7 @@ shared.failedScripts = {}
 --  CONFIGURATION
 -- ================================================================
 local scripts = {
-    "https://raw.githubusercontent.com/1337kat/V5/main/main",
+    "https://raw.githubusercontent.com/1337kat/V5/main/Broken",
 }
 
 local function maskedName(url)
