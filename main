@@ -1,3 +1,29 @@
+-- Keybind B to Respawn
+task.spawn(function()
+	local UIS = game:GetService("UserInputService")
+	local Players = game:GetService("Players")
+
+	local player = Players.LocalPlayer
+	local tcp = player:WaitForChild("TCP")
+
+	UIS.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+
+		if input.KeyCode == Enum.KeyCode.B then
+			local args = {
+				4,
+				[3] = false
+			}
+
+			tcp:FireServer(unpack(args))
+		end
+	end)
+end)
+
+
+
+
+
 -- WIFI/ETHERNET CONNECTION INTERRUPTED INDICATOR
 task.spawn(function()
 
