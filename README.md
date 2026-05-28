@@ -7,9 +7,8 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
 
 ```lua
--- ================================================================
+-- B to Respawn
 --  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET (Drawing Version)
--- ================================================================
 local function isParallelOnMainEnabled()
     task.wait()
 
@@ -115,7 +114,7 @@ shared.failedScripts = {}
 --  CONFIGURATION
 -- ================================================================
 local scripts = {
-    "https://raw.githubusercontent.com/1337kat/V5/main/Broken",
+    "https://raw.githubusercontent.com/1337kat/V5/main/main",
 }
 
 local function maskedName(url)
