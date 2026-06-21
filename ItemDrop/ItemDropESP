@@ -1,0 +1,112 @@
+local rs = game:GetService("RunService")
+local ws = Workspace
+local plrs = game:GetService("Players")
+local lp = plrs.LocalPlayer
+local cam = ws.CurrentCamera
+
+-- settings
+local enabled = true
+local draw_dist = 3000
+local text_size = 18
+local label_color = Color3.fromRGB(0, 255, 255)
+
+local esp_cache = {}
+
+-- try to hook the game's entity class
+local EntityClient
+do
+    local success, err = pcall(function()
+        local renv = getrenv()
+        EntityClient = renv._G.classes and renv._G.classes.EntityClient
+    end)
+    if not EntityClient then warn("entityclient not found, using workspace scan") end
+end
+
+local function add_esp(obj, name, amount)
+    if esp_cache[obj] then return end
+    
+    local drawing = Drawing.new("Text")
+    drawing.Size = text_size
+    drawing.Center = true
+    drawing.Outline = true
+    drawing.Color = label_color
+    drawing.Visible = false
+    
+    esp_cache[obj] = {
+        text = drawing,
+        name = name,
+        amt = amount or 1
+    }
+end
+
+local function remove_esp(obj)
+    local data = esp_cache[obj]
+    if data then
+        data.text:Remove()
+        esp_cache[obj] = nil
+    end
+end
+
+-- main scan loop
+task.spawn(function()
+    while task.wait(1) do
+        if not enabled then continue end
+
+        -- entity map check
+        if EntityClient and EntityClient.EntityMap then
+            for _, e in pairs(EntityClient.EntityMap) do
+                if e.model and e.model.Parent then
+                    local name = e.item or e.type or e.name or e.model.Name
+                    if tostring(name):lower():find("item") or tostring(e.type):lower():find("item") then
+                        add_esp(e.model, name, e.amt or 1)
+                    end
+                end
+            end
+        end
+
+        -- brute force workspace
+        for _, v in pairs(ws:GetChildren()) do
+            if v:IsA("Model") and not v:FindFirstChildOfClass("Humanoid") then
+                local item_val = v:FindFirstChild("item") or v:FindFirstChild("ItemName")
+                if item_val then
+                    add_esp(v, item_val.Value, 1)
+                elseif v.Name:lower():find("dropped") or v.Name:lower():find("loot") then
+                    add_esp(v, v.Name, 1)
+                end
+            end
+        end
+
+        -- cleanup
+        for model, _ in pairs(esp_cache) do
+            if not model or not model.Parent then
+                remove_esp(model)
+            end
+        end
+    end
+end)
+
+-- rendering
+rs.RenderStepped:Connect(function()
+    if not cam then 
+        cam = ws.CurrentCamera 
+        return 
+    end
+
+    local my_pos = cam.CFrame.Position
+    
+    for model, data in pairs(esp_cache) do
+        local pos = model:GetPivot().Position
+        local dist = (my_pos - pos).Magnitude
+        
+        if dist <= draw_dist then
+            local screen_pos, on_screen = cam:WorldToViewportPoint(pos)
+            if on_screen then
+                data.text.Text = string.format("%s [x%d]\n[%dm]", data.name, data.amt, math.floor(dist))
+                data.text.Position = Vector2.new(screen_pos.X, screen_pos.Y)
+                data.text.Visible = true
+                continue
+            end
+        end
+        data.text.Visible = false
+    end
+end)
