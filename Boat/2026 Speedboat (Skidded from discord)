@@ -1,0 +1,176 @@
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local speed = 250
+local upspeed = 30
+local yawRate = 0.5
+local maxForce = 20000
+
+local boat = nil
+local yaw = 0
+local wasInBoat = false
+
+local oldNewIndex
+local mt = getrawmetatable(game)
+if mt and mt.__newindex then
+    if hookmetamethod then
+        oldNewIndex = hookmetamethod(game, "__newindex", function(t, k, v)
+            if (k == "CFrame" or k == "AssemblyLinearVelocity") and checkcaller() then
+                return
+            end
+            return oldNewIndex(t, k, v)
+        end)
+    end
+end
+
+local function isPlayerSittingIn(model)
+    local success, currentVehicle = pcall(function()
+        local renv = getrenv()
+        if renv._G and renv._G.classes and renv._G.classes.Character then
+            return renv._G.classes.Character.GetVehicle()
+        end
+        return nil
+    end)
+    
+    if success and currentVehicle and type(currentVehicle) == "table" and currentVehicle.model == model then
+        return true
+    end
+    
+    local seats = model:FindFirstChild("Seats")
+    local cam = workspace.CurrentCamera
+    if seats and cam then
+        local dist = (seats.Position - cam.CFrame.Position).Magnitude
+        if dist < 6.5 then
+            return true
+        end
+    end
+    
+    return false
+end
+
+local function findBoat()
+    local oldBoat = boat
+    boat = nil
+    
+    for _, model in ipairs(workspace:GetChildren()) do
+        if model:IsA("Model") and model:FindFirstChild("Hull") then
+            if isPlayerSittingIn(model) then
+                boat = model
+                boat.PrimaryPart = model.Hull
+                break
+            end
+        end
+    end
+    
+    if boat and not wasInBoat then
+        print("Sitting")
+        wasInBoat = true
+    elseif not boat and wasInBoat then
+        print("boat Not sitting (sit your ass back dwon gng)")
+        wasInBoat = false
+        
+        if oldBoat and oldBoat:FindFirstChild("Hull") then
+            local hull = oldBoat.Hull
+            for _, v in pairs(oldBoat:GetChildren()) do
+                if v:IsA("BasePart") then
+                    pcall(function() v.AssemblyLinearVelocity = Vector3.new(0,0,0) end)
+                end
+            end
+            pcall(function()
+                if hull:FindFirstChild("LinearVelocity") then
+                    hull.LinearVelocity.Enabled = false
+                    hull.LinearVelocity.MaxForce = 0
+                    hull.LinearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+                end
+                if hull:FindFirstChild("AlignPosition") then
+                    hull.AlignPosition.Enabled = true
+                end
+            end)
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(function(delta)
+    findBoat()
+    
+    if not boat or not boat:FindFirstChild("Hull") then return end
+    
+    local hull = boat.Hull
+    local cameralook = workspace.CurrentCamera.CFrame.LookVector
+    cameralook = Vector3.new(cameralook.X, 0, cameralook.Z).Unit
+    
+    local direction = Vector3.zero
+    local isMoving = false
+    
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+        direction = direction + cameralook
+        isMoving = true
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+        direction = direction - cameralook
+        isMoving = true
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+        direction = direction + Vector3.new(-cameralook.Z, 0, cameralook.X)
+        isMoving = true
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+        direction = direction + Vector3.new(cameralook.Z, 0, -cameralook.X)
+        isMoving = true
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.V) then
+        direction = direction + Vector3.yAxis
+        isMoving = true
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.B) then
+        direction = direction - Vector3.yAxis
+        isMoving = true
+    end
+    
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+        yaw = yaw + yawRate * delta
+    elseif UserInputService:IsKeyDown(Enum.KeyCode.D) then
+        yaw = yaw - yawRate * delta
+    end
+    
+    if isMoving and direction ~= Vector3.zero then
+        direction = direction.Unit
+    else
+        direction = Vector3.zero
+    end
+    
+    local waterLevel = workspace:GetAttribute("WaterLevel") or 0
+    local newPos = hull.CFrame.Position + direction * speed * delta
+    newPos = Vector3.new(newPos.X, math.max(newPos.Y, waterLevel + 2), newPos.Z)
+    
+    local newCFrame = CFrame.new(newPos) * CFrame.Angles(0, yaw, 0)
+    
+    pcall(function() boat:PivotTo(newCFrame) end)
+    
+    for _, v in pairs(boat:GetChildren()) do
+        if v:IsA("BasePart") then
+            pcall(function() v.AssemblyLinearVelocity = Vector3.new(direction.X * speed, direction.Y * upspeed, direction.Z * speed) end)
+        end
+    end
+    
+    pcall(function()
+        if hull:FindFirstChild("LinearVelocity") then
+            hull.LinearVelocity.Enabled = true
+            hull.LinearVelocity.MaxForce = maxForce
+            hull.LinearVelocity.VectorVelocity = Vector3.new(direction.X * speed, direction.Y * upspeed, direction.Z * speed)
+        end
+        if hull:FindFirstChild("MotorSound") then
+            hull.MotorSound:Stop()
+            hull.MotorSound.PlaybackSpeed = 0
+            hull.MotorSound.Volume = 0
+        end
+        if hull:FindFirstChild("Steer") and hull.Steer:FindFirstChild("AngularVelocity") then
+            hull.Steer.AngularVelocity.AngularVelocity = Vector3.new(0, 0, 0)
+            hull.Steer.AngularVelocity.MaxTorque = Vector3.new(0, 0, 0)
+        end
+        if hull:FindFirstChild("AlignPosition") then
+            hull.AlignPosition.Enabled = false
+            hull.AlignPosition.MaxForce = 0
+        end
+    end)
+end)
