@@ -56,6 +56,11 @@ local badItems = {
 	"ironshot",
 	"steelshot",
 	"pumpshotgun",
+	"shoulderlight",
+	"gasmask",
+	"ironoreitem",
+	"kevlarvest",
+	"steelhammer",
 	
 	
 	
