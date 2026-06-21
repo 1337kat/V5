@@ -7,7 +7,6 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
 
 ```lua
--- This part runs First
 local UserInputService = game:GetService("UserInputService")
 local player = game:GetService("Players").LocalPlayer
 local remote = player:WaitForChild("TCP")
@@ -22,23 +21,73 @@ task.spawn(function()
         for _, v in pairs(getgc(true)) do
             if type(v) == "table" and type(v.GetInventoryItems) == "function" then
                 NEXT = v
+                print("NEXT inventory system found successfully!")
                 break
             end
         end
     end)
     
     if not NEXT then
+        print("NEXT not found yet - try opening inventory then re-execute")
     end
 end)
 
 -- Add all unwanted items here (case insensitive)
 local badItems = {
-    "fiber",
-    -- Add more items below:
-    -- "wood",
-    -- "stone",
-    -- "leaf",
-    -- "bark",
+	"hammer",
+	"stonehammer",
+	"ironhammer",
+	"steelhammer",
+	"glowstick",
+	"fiber",
+	"gastrapitem",
+	"spikedevice",
+	"lockpick",
+	"buildingtool",
+	"climbingpick",
+	"smallboxitem",
+	"woodarrow",
+	"stonearrow",
+	"ironarrow",
+	"poisonarrow",
+	"bow",
+	"crowbar",
+	"stoneshot",
+	"ironshot",
+	"steelshot",
+	"pumpshotgun",
+	
+	
+	
+
+
+
+
+	"woodleggings",
+	"woodchestplate",
+	"woodhelmet",
+
+	"riotleggings",
+	"riotchestplate",
+	"riothelmet",
+	
+	"ironleggings",
+	"ironchestplate",
+	"ironhelmet",
+
+	"steelleggings",
+	"steelchestplate",
+	
+
+
+	"boots",
+	"camopants",
+	"camoshirt",
+
+	"policepants",
+	"riotshield",
+
+	
 }
 
 local function isBadItem(item)
@@ -61,6 +110,7 @@ local function cleanBadItems()
     local inventory = NEXT.GetInventoryItems and NEXT.GetInventoryItems() or {}
     local cleaned = 0
 
+    print("=== INSTANT CLEANING UNWANTED ITEMS ===")
     for i = 1, 43 do
         local item = inventory[i]
         if isBadItem(item) then
@@ -70,6 +120,9 @@ local function cleanBadItems()
             cleaned = cleaned + 1
         end
     end
+
+    print("Instantly cleaned " .. cleaned .. " unwanted items.")
+    print("=== CLEAN COMPLETE ===\n")
 end
 
 -- Fully isolated connection
@@ -224,7 +277,6 @@ task.delay(3, function()
         print(string.format("✅ All %d scripts executed successfully.", #scripts))
     end
 end)
-
 ```
 
 # Loader
