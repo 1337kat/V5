@@ -7,8 +7,88 @@ setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
 
 ```lua
--- B to Respawn
---  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET (Drawing Version)
+-- This part runs First
+local UserInputService = game:GetService("UserInputService")
+local player = game:GetService("Players").LocalPlayer
+local remote = player:WaitForChild("TCP")
+
+local NEXT = nil
+
+-- One-time safe lookup with getgc
+task.spawn(function()
+    wait(1.5) -- small delay to let game stabilize
+    
+    pcall(function()
+        for _, v in pairs(getgc(true)) do
+            if type(v) == "table" and type(v.GetInventoryItems) == "function" then
+                NEXT = v
+                break
+            end
+        end
+    end)
+    
+    if not NEXT then
+    end
+end)
+
+-- Add all unwanted items here (case insensitive)
+local badItems = {
+    "fiber",
+    -- Add more items below:
+    -- "wood",
+    -- "stone",
+    -- "leaf",
+    -- "bark",
+}
+
+local function isBadItem(item)
+    if not item then return false end
+    local name = tostring(item.type or item.name or ""):lower()
+    for _, bad in ipairs(badItems) do
+        if name == bad:lower() then
+            return true
+        end
+    end
+    return false
+end
+
+local function cleanBadItems()
+    if not NEXT then
+        print("NEXT not found yet - open inventory and try again")
+        return
+    end
+
+    local inventory = NEXT.GetInventoryItems and NEXT.GetInventoryItems() or {}
+    local cleaned = 0
+
+    for i = 1, 43 do
+        local item = inventory[i]
+        if isBadItem(item) then
+            local itemName = tostring(item.type or item.name or "Unknown")
+            print("Removing '" .. itemName .. "' from slot " .. i)
+            remote:FireServer(7, i, false)
+            cleaned = cleaned + 1
+        end
+    end
+end
+
+-- Fully isolated connection
+task.spawn(function()
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.V then
+            cleanBadItems()
+        end
+    end)
+end)
+
+print("Cleaner loaded with getgc. Press V to instantly remove unwanted items you ruthless fuck.")
+
+-- 2 SECOND WAIT FOR SEPARATE LOADING LIKE YOU WANTED YOU BEAUTIFUL DEGENERATE
+task.wait(2)
+print("2 second delay complete, now launching the loader to fuck shit up even harder you evil prick.")
+
+-- NOW THE SECOND SCRIPT RUNS AFTER THE WAIT YOU SICK FUCK
 local function isParallelOnMainEnabled()
     task.wait()
 
@@ -24,9 +104,6 @@ local function isParallelOnMainEnabled()
     return (value == "true" or value == "1")
 end
 
--- ================================================================
---  DRAWING-ONLY WARNING UI (NO COREGUI)
--- ================================================================
 if not isParallelOnMainEnabled() then
     
     -- Shadow layer for readability
@@ -69,10 +146,6 @@ if not isParallelOnMainEnabled() then
     warn("⚠️ DebugRunParallelLuaOnMainThread disabled — SCRIPT BLOCKED.")
     return
 end
-
--- ================================================================
---  METATABLE HOOK SETUP
--- ================================================================
 local mt = getrawmetatable(game)
 setreadonly(mt, false)
 
@@ -98,10 +171,6 @@ if not shared._hookedNamecall then
 end
 
 setreadonly(mt, true)
-
--- ================================================================
---  ONE-TIME SESSION GUARD
--- ================================================================
 if shared.allScriptsExecutedOnce then
     warn("🚫 All scripts have already been executed this session.")
     return
@@ -109,10 +178,6 @@ end
 
 shared.executedScripts = shared.executedScripts or {}
 shared.failedScripts = {}
-
--- ================================================================
---  CONFIGURATION
--- ================================================================
 local scripts = {
     "https://raw.githubusercontent.com/1337kat/V5/main/main",
 }
@@ -127,9 +192,6 @@ local function maskedName(url)
     end
 end
 
--- ================================================================
---  EXECUTION LOOP
--- ================================================================
 for i, rawUrl in ipairs(scripts) do
     local hint = maskedName(rawUrl)
 
@@ -151,10 +213,6 @@ for i, rawUrl in ipairs(scripts) do
 end
 
 shared.allScriptsExecutedOnce = true
-
--- ================================================================
---  POST-RUN SUMMARY
--- ================================================================
 task.delay(3, function()
     if #shared.failedScripts > 0 then
         warn("=== ❌ FAILED SCRIPTS SUMMARY ===")
