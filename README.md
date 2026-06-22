@@ -71,6 +71,10 @@ local badItems = {
 	"redberry",
 	"blackberry",
 	"yellowberry",
+	"leveractionrifle",
+	"flippers",
+	"rebreather",
+	"uzi",
 
 	"woodleggings",
 	"woodchestplate",
