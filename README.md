@@ -70,20 +70,10 @@ local badItems = {
 	"hmar",
 	"redberry",
 	"blackberry",
-	
-	
-	
-
-
-
 
 	"woodleggings",
 	"woodchestplate",
 	"woodhelmet",
-
-	"riotleggings",
-	"riotchestplate",
-	"riothelmet",
 	
 	"ironleggings",
 	"ironchestplate",
@@ -91,12 +81,14 @@ local badItems = {
 
 	"steelleggings",
 	"steelchestplate",
-	
-
 
 	"boots",
 	"camopants",
 	"camoshirt",
+
+	"riothelmet",
+	"riotchestplate",
+	"riotleggings",
 
 	"policepants",
 	"policeshirt",
