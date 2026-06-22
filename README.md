@@ -75,6 +75,16 @@ local badItems = {
 	"flippers",
 	"rebreather",
 	"uzi",
+	"blunderbuss",
+	"bloxycola",
+	"nitrateoreitem",
+	"healingbandage",
+	"spraypaint",
+	"usp9",
+	"pipesmg",
+	"magnum",
+	"candle",
+
 
 	"woodleggings",
 	"woodchestplate",
