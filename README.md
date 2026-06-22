@@ -70,6 +70,7 @@ local badItems = {
 	"hmar",
 	"redberry",
 	"blackberry",
+	"yellowberry",
 
 	"woodleggings",
 	"woodchestplate",
