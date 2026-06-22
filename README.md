@@ -67,6 +67,10 @@ local badItems = {
 	"crossbow",
 	"flamethrower",
 	"9mm",
+	"bandage",
+	"hmar",
+	"redberry",
+	"blackberry",
 	
 	
 	
