@@ -61,6 +61,12 @@ local badItems = {
 	"ironoreitem",
 	"kevlarvest",
 	"steelhammer",
+	"c9",
+	"kabar",
+	"pipepistol",
+	"crossbow",
+	"flamethrower",
+	"9mm"
 	
 	
 	
@@ -90,6 +96,7 @@ local badItems = {
 	"camoshirt",
 
 	"policepants",
+	"policeshirt",
 	"riotshield",
 
 	
