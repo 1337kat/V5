@@ -83,7 +83,7 @@ local badItems = {
 	"usp9",
 	"pipesmg",
 	"magnum",
-	"candle",
+	"candleitem",
 
 
 	"woodleggings",
