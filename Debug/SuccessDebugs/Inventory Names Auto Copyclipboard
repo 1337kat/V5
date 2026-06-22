@@ -1,0 +1,66 @@
+local plrs = game:GetService("Players")
+local lp = plrs.LocalPlayer
+
+local NEXT = _G.NEXT
+if not NEXT then
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "table" and v.EquipItemSlot and v.SetInventorySlotData then
+            NEXT = v
+            break
+        end
+    end
+end
+
+if not NEXT then
+    local errMsg = '"NEXT module not found - try re-executing"'
+    setclipboard(errMsg)
+    return
+end
+
+local itemNames = {}
+local seen = {}
+
+local function collectItemNames()
+    local inventory = NEXT.GetInventoryItems and NEXT.GetInventoryItems() or {}
+    for i = 1, 43 do
+        local item = inventory[i]
+        if item then
+            local name = tostring(item.type or item.name or ""):lower()
+            if name ~= "" and not seen[name] then
+                seen[name] = true
+                table.insert(itemNames, '"' .. name .. '"')
+            end
+        end
+    end
+end
+
+local function buildClipboardList()
+    collectItemNames()
+    local listStr = table.concat(itemNames, ", ")
+    local final = "local badItems = {\n    " .. listStr .. "\n    -- Add more items\n}"
+    return final
+end
+
+if NEXT and NEXT.EquipItemSlot then
+    local oldEquip = NEXT.EquipItemSlot
+    NEXT.EquipItemSlot = function(slot, ...)
+        return oldEquip(slot, ...)
+    end
+end
+
+if NEXT and NEXT.SetInventorySlotData then
+    local oldSet = NEXT.SetInventorySlotData
+    NEXT.SetInventorySlotData = function(isContainer, slot, data, ...)
+        return oldSet(isContainer, slot, data, ...)
+    end
+end
+
+-- One-time clipboard execute
+task.spawn(function()
+    task.wait(1)
+    collectItemNames()
+    local clipboardContent = buildClipboardList()
+    setclipboard(clipboardContent)
+end)
+
+setclipboard('local badItems = {\n    "fiber"\n    -- Full list copied\n}')
