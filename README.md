@@ -60,7 +60,6 @@ local badItems = {
 	"gasmask",
 	"ironoreitem",
 	"kevlarvest",
-	"steelhammer",
 	"c9",
 	"kabar",
 	"pipepistol",
