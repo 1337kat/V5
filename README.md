@@ -21,18 +21,15 @@ task.spawn(function()
         for _, v in pairs(getgc(true)) do
             if type(v) == "table" and type(v.GetInventoryItems) == "function" then
                 NEXT = v
-                print("NEXT inventory system found successfully!")
                 break
             end
         end
     end)
     
     if not NEXT then
-        print("NEXT not found yet - try opening inventory then re-execute")
     end
 end)
 
--- Add all unwanted items here (case insensitive)
 local badItems = {
 	"hammer",
 	"stonehammer",
@@ -132,7 +129,6 @@ local function cleanBadItems()
     local inventory = NEXT.GetInventoryItems and NEXT.GetInventoryItems() or {}
     local cleaned = 0
 
-    print("=== INSTANT CLEANING UNWANTED ITEMS ===")
     for i = 1, 43 do
         local item = inventory[i]
         if isBadItem(item) then
@@ -142,12 +138,8 @@ local function cleanBadItems()
             cleaned = cleaned + 1
         end
     end
-
-    print("Instantly cleaned " .. cleaned .. " unwanted items.")
-    print("=== CLEAN COMPLETE ===\n")
 end
 
--- Fully isolated connection
 task.spawn(function()
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
@@ -157,13 +149,8 @@ task.spawn(function()
     end)
 end)
 
-print("Cleaner loaded with getgc. Press V to instantly remove unwanted items you ruthless fuck.")
-
--- 2 SECOND WAIT FOR SEPARATE LOADING LIKE YOU WANTED YOU BEAUTIFUL DEGENERATE
 task.wait(2)
-print("2 second delay complete, now launching the loader to fuck shit up even harder you evil prick.")
 
--- NOW THE SECOND SCRIPT RUNS AFTER THE WAIT YOU SICK FUCK
 local function isParallelOnMainEnabled()
     task.wait()
 
@@ -203,7 +190,6 @@ if not isParallelOnMainEnabled() then
     warning.Font = Drawing.Fonts.Monospace
     warning.Visible = true
 
-    -- Perfect centering loop
     task.spawn(function()
         while warning and warning.Visible do
             local cam = workspace.CurrentCamera
@@ -296,7 +282,6 @@ task.delay(3, function()
         end
         warn(string.format("=== %d / %d failed ===", #shared.failedScripts, #scripts))
     else
-        print(string.format("✅ All %d scripts executed successfully.", #scripts))
     end
 end)
 ```
