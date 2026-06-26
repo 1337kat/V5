@@ -210,23 +210,37 @@ local HttpService = game:GetService("HttpService")
 --========================================================--
 
 local MOD_USERIDS = {
-    1301649807, -- TopIncognito [HR MOD]
-    470568310, -- HoneyBree_T [HR MOD]
-    303008331, -- alesko12345 [MOD]
-    299133654, -- DovydasTEDS [MOD]
-    542318462, -- pokediner12 [MOD]
-    383469839, -- nedkinger [MOD]
-    24977621, -- AlphaByteDev [CO OWNER]
-    6073198178, -- SkullTridentHolder [GROUP HOLDER]
-    7591973155, -- BatmanSavedTheCIty1 (Admin Alt)
-    41313278, -- leporus (JR DEVELOPER)
-    31974897, -- imnotaguestimaboyy (CO OWNER)
-    7157227443, -- TridentSniper0 (CO OWNER)
-    4561105558, -- @The2AnOnly (OWNER)
-    9689950591, -- @ELEVATORHax (HR MOD)
-    147028833, -- @affrt (HR MOD)
-    3333467316, -- @Cr8zy_GurI (HR MOD)
-    470568310, -- @Jaxxzyyy [HR MOD]
+	1301649807, -- TopIncognito [HR MOD]
+	470568310, -- HoneyBree_T [HR MOD]
+	303008331, -- alesko12345 [MOD]
+	299133654, -- DovydasTEDS [MOD]
+	542318462, -- pokediner12 [MOD]
+	383469839, -- nedkinger [MOD]
+	24977621, -- AlphaByteDev [CO OWNER]
+	6073198178, -- SkullTridentHolder [GROUP HOLDER]
+	7591973155, -- BatmanSavedTheCIty1 (Admin Alt)
+	41313278, -- leporus (JR DEVELOPER)
+	31974897, -- imnotaguestimaboyy (CO OWNER)
+	7157227443, -- TridentSniper0 (CO OWNER)
+	4561105558, -- @The2AnOnly (OWNER)
+	9689950591, -- @ELEVATORHax (HR MOD)
+	147028833, -- @affrt (HR MOD)
+	3333467316, -- @Cr8zy_GurI (HR MOD)
+	3468042190,
+	620594280,
+	61105506,
+	3624235289,
+	2943703979,
+	2225312622,
+	528689869,
+	2777054858,
+	168703234,
+	350945744,
+	2300028824,
+	1986802555,
+	1193855136,
+	169268,
+	50464767,
 
 
 }
