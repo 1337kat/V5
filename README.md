@@ -5,7 +5,150 @@
 ```lua
 setfflag("DebugRunParallelLuaOnMainThread","True");
 ```
+# Volt
+```lua
+local function isParallelOnMainEnabled()
+    task.wait()
 
+    local ok, value = pcall(function()
+        return getfflag and getfflag("DebugRunParallelLuaOnMainThread")
+    end)
+
+    if not ok or value == nil then
+        return false
+    end
+
+    value = tostring(value):lower()
+    return (value == "true" or value == "1")
+end
+
+if not isParallelOnMainEnabled() then
+    
+    local shadow = Drawing.new("Text")
+    shadow.Text = "⚠️ ENABLE FFLAG: setfflag('DebugRunParallelLuaOnMainThread','True')"
+    shadow.Size = 60
+    shadow.Center = true
+    shadow.Outline = true
+    shadow.OutlineColor = Color3.new(0,0,0)
+    shadow.Color = Color3.new(0, 0, 0)
+    shadow.Font = Drawing.Fonts.Monospace
+    shadow.Visible = true
+
+    -- Main bright text
+    local warning = Drawing.new("Text")
+    warning.Text = "⚠️ ENABLE FFLAG: setfflag('DebugRunParallelLuaOnMainThread','True')"
+    warning.Size = 60
+    warning.Center = true
+    warning.Outline = true
+    warning.OutlineColor = Color3.new(0,0,0)
+    warning.Color = Color3.fromRGB(255, 60, 60)
+    warning.Font = Drawing.Fonts.Monospace
+    warning.Visible = true
+
+    -- Perfect centering loop
+    task.spawn(function()
+        while warning and warning.Visible do
+            local cam = workspace.CurrentCamera
+            if cam then
+                local vp = cam.ViewportSize
+                local center = Vector2.new(vp.X/2, vp.Y/2)
+
+                warning.Position = center
+                shadow.Position  = center + Vector2.new(3, 3)
+            end
+            task.wait()
+        end
+    end)
+
+    warn("⚠️ DebugRunParallelLuaOnMainThread disabled — SCRIPT BLOCKED.")
+    return
+end
+
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+if not shared._hookedNamecall then
+    shared._namecall_hooks = {}
+    local oldNamecall = mt.__namecall
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = { ... }
+
+        for _, hook in ipairs(shared._namecall_hooks) do
+            local ok, result = pcall(hook, self, method, args)
+            if ok and result ~= nil then
+                return result
+            end
+        end
+
+        return oldNamecall(self, unpack(args))
+    end)
+
+    shared._hookedNamecall = true
+end
+
+setreadonly(mt, true)
+
+if shared.allScriptsExecutedOnce then
+    warn("🚫 All scripts have already been executed this session.")
+    return
+end
+
+shared.executedScripts = shared.executedScripts or {}
+shared.failedScripts = {}
+
+local scripts = {
+    "https://raw.githubusercontent.com/1337kat/V5/main/main",
+--  "URL",
+}
+
+local function maskedName(url)
+    local name = url:match("([^/]+)$") or "Unknown"
+    name = name:gsub("%.lua", "")
+    if #name > 8 then
+        return "***" .. name:sub(-8)
+    else
+        return "***" .. name
+    end
+end
+
+for i, rawUrl in ipairs(scripts) do
+    local hint = maskedName(rawUrl)
+
+    if not shared.executedScripts[i] then
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(rawUrl, true))()
+        end)
+
+        if success then
+            shared.executedScripts[i] = true
+            print(string.format("✅ #%d %s executed successfully.", i, hint))
+        else
+            table.insert(shared.failedScripts, { index = i, hint = hint })
+            warn(string.format("❌ #%d %s failed to execute.", i, hint))
+        end
+    else
+        print(string.format("⏭️ #%d %s already executed this session.", i, hint))
+    end
+end
+
+shared.allScriptsExecutedOnce = true
+
+task.delay(3, function()
+    if #shared.failedScripts > 0 then
+        warn("=== ❌ FAILED SCRIPTS SUMMARY ===")
+        for _, item in ipairs(shared.failedScripts) do
+            warn(string.format("• #%d %s failed", item.index, item.hint))
+        end
+        warn(string.format("=== %d / %d failed ===", #shared.failedScripts, #scripts))
+    else
+        print(string.format("✅ All %d scripts executed successfully.", #scripts))
+    end
+end)
+```
+
+# Potassium
 ```lua
 local UserInputService = game:GetService("UserInputService")
 local player = game:GetService("Players").LocalPlayer
@@ -286,169 +429,7 @@ task.delay(3, function()
 end)
 ```
 
-# Original Loader
-```lua
--- B to Respawn
---  🚫 FFLAG GUARD — STOP EVERYTHING IF NOT SET (Drawing Version)
-local function isParallelOnMainEnabled()
-    task.wait()
 
-    local ok, value = pcall(function()
-        return getfflag and getfflag("DebugRunParallelLuaOnMainThread")
-    end)
-
-    if not ok or value == nil then
-        return false
-    end
-
-    value = tostring(value):lower()
-    return (value == "true" or value == "1")
-end
-
--- ================================================================
---  DRAWING-ONLY WARNING UI (NO COREGUI)
--- ================================================================
-if not isParallelOnMainEnabled() then
-    
-    -- Shadow layer for readability
-    local shadow = Drawing.new("Text")
-    shadow.Text = "⚠️ ENABLE FFLAG: setfflag('DebugRunParallelLuaOnMainThread','True')"
-    shadow.Size = 60
-    shadow.Center = true
-    shadow.Outline = true
-    shadow.OutlineColor = Color3.new(0,0,0)
-    shadow.Color = Color3.new(0, 0, 0)
-    shadow.Font = Drawing.Fonts.Monospace
-    shadow.Visible = true
-
-    -- Main bright text
-    local warning = Drawing.new("Text")
-    warning.Text = "⚠️ ENABLE FFLAG: setfflag('DebugRunParallelLuaOnMainThread','True')"
-    warning.Size = 60
-    warning.Center = true
-    warning.Outline = true
-    warning.OutlineColor = Color3.new(0,0,0)
-    warning.Color = Color3.fromRGB(255, 60, 60)
-    warning.Font = Drawing.Fonts.Monospace
-    warning.Visible = true
-
-    -- Perfect centering loop
-    task.spawn(function()
-        while warning and warning.Visible do
-            local cam = workspace.CurrentCamera
-            if cam then
-                local vp = cam.ViewportSize
-                local center = Vector2.new(vp.X/2, vp.Y/2)
-
-                warning.Position = center
-                shadow.Position  = center + Vector2.new(3, 3)
-            end
-            task.wait()
-        end
-    end)
-
-    warn("⚠️ DebugRunParallelLuaOnMainThread disabled — SCRIPT BLOCKED.")
-    return
-end
-
--- ================================================================
---  METATABLE HOOK SETUP
--- ================================================================
-local mt = getrawmetatable(game)
-setreadonly(mt, false)
-
-if not shared._hookedNamecall then
-    shared._namecall_hooks = {}
-    local oldNamecall = mt.__namecall
-
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = { ... }
-
-        for _, hook in ipairs(shared._namecall_hooks) do
-            local ok, result = pcall(hook, self, method, args)
-            if ok and result ~= nil then
-                return result
-            end
-        end
-
-        return oldNamecall(self, unpack(args))
-    end)
-
-    shared._hookedNamecall = true
-end
-
-setreadonly(mt, true)
-
--- ================================================================
---  ONE-TIME SESSION GUARD
--- ================================================================
-if shared.allScriptsExecutedOnce then
-    warn("🚫 All scripts have already been executed this session.")
-    return
-end
-
-shared.executedScripts = shared.executedScripts or {}
-shared.failedScripts = {}
-
--- ================================================================
---  CONFIGURATION
--- ================================================================
-local scripts = {
-    "https://raw.githubusercontent.com/1337kat/V5/main/main2",
-}
-
-local function maskedName(url)
-    local name = url:match("([^/]+)$") or "Unknown"
-    name = name:gsub("%.lua", "")
-    if #name > 8 then
-        return "***" .. name:sub(-8)
-    else
-        return "***" .. name
-    end
-end
-
--- ================================================================
---  EXECUTION LOOP
--- ================================================================
-for i, rawUrl in ipairs(scripts) do
-    local hint = maskedName(rawUrl)
-
-    if not shared.executedScripts[i] then
-        local success, result = pcall(function()
-            return loadstring(game:HttpGet(rawUrl, true))()
-        end)
-
-        if success then
-            shared.executedScripts[i] = true
-            print(string.format("✅ #%d %s executed successfully.", i, hint))
-        else
-            table.insert(shared.failedScripts, { index = i, hint = hint })
-            warn(string.format("❌ #%d %s failed to execute.", i, hint))
-        end
-    else
-        print(string.format("⏭️ #%d %s already executed this session.", i, hint))
-    end
-end
-
-shared.allScriptsExecutedOnce = true
-
--- ================================================================
---  POST-RUN SUMMARY
--- ================================================================
-task.delay(3, function()
-    if #shared.failedScripts > 0 then
-        warn("=== ❌ FAILED SCRIPTS SUMMARY ===")
-        for _, item in ipairs(shared.failedScripts) do
-            warn(string.format("• #%d %s failed", item.index, item.hint))
-        end
-        warn(string.format("=== %d / %d failed ===", #shared.failedScripts, #scripts))
-    else
-        print(string.format("✅ All %d scripts executed successfully.", #scripts))
-    end
-end)
-
-```
 
 
 # Loader
